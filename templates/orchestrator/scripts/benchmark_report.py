@@ -43,10 +43,32 @@ def _tel(r, key):
     return (r.get("telemetry") or {}).get(key)
 
 
+def _all_tokens(r):
+    """A run's tokens: main session plus agent runs when recorded (results since the main session is measured),
+    else the agent runs' alone (older results)."""
+    tel = r.get("telemetry") or {}
+    return tel.get("total_tokens") if "total_tokens" in tel else tel.get("tokens")
+
+
 def _tokens(runs):
     """Token totals of the runs, or None when any run lacks complete coverage."""
-    totals = [(_tel(r, "tokens") or {}).get("total") for r in runs]
+    totals = [(_all_tokens(r) or {}).get("total") for r in runs]
     return None if not runs or None in totals else totals
+
+
+def _kind_row(task, side, runs):
+    def med(get):
+        vals = [get(r) for r in runs]
+        return "incomplete" if None in vals or not vals else _fmt_n(statistics.median(vals))
+    covs = {tuple(_tel(r, "coverage") or ()) for r in runs}
+    cov = covs.pop() if len(covs) == 1 else ()
+    return "| %s | %s | %s | %s | %s | %s | %s | %s | %s |" % (
+        task, side, med(lambda r: (_tel(r, "main_tokens") or {}).get("total")),
+        med(lambda r: (_tel(r, "tokens") or {}).get("total")),
+        med(lambda r: (_all_tokens(r) or {}).get("input")), med(lambda r: (_all_tokens(r) or {}).get("output")),
+        med(lambda r: (_all_tokens(r) or {}).get("cache_read")),
+        med(lambda r: (_all_tokens(r) or {}).get("cache_write")),
+        "%d/%d" % cov if len(cov) == 2 else "mixed")
 
 
 def _rate(runs, code):
@@ -80,7 +102,7 @@ def _side(runs):
 def compare(dir_a, dir_b):
     a_all, b_all = _load(dir_a), _load(dir_b)
     tasks = sorted({r["task"] for r in a_all} | {r["task"] for r in b_all})
-    quality, consumption, reading = [], [], []
+    quality, consumption, reading, kinds = [], [], [], []
     for task in tasks:
         a = [r for r in a_all if r["task"] == task]
         b = [r for r in b_all if r["task"] == task]
@@ -103,6 +125,7 @@ def compare(dir_a, dir_b):
         consumption.append("| %s | %s | %s | %s | %s | %s | %s |" % (
             task, _spread(ta, _fmt_n) if ta else "incomplete", _spread(tb, _fmt_n) if tb else "incomplete",
             _spread(wa, _secs), _spread(wb, _secs), _spread(ca, _secs), _spread(cb, _secs)))
+        kinds += [_kind_row(task, "A", a), _kind_row(task, "B", b)]
         if why:
             reading.append("- %s: not comparable (%s): no reading." % (task, why))
             continue
@@ -139,8 +162,13 @@ def compare(dir_a, dir_b):
            "", "## Consumption", "",
            "| Task | Tokens A | Tokens B | Wall time A | Wall time B | Agent time A (cumulative) | "
            "Agent time B (cumulative) |", "|---|---|---|---|---|---|---|"] + consumption + [
-           "", "> Median (min–max) over the runs. Tokens as Claude Code reported them, compared only with complete "
-           "coverage. Wall time is the session's; cumulative agent time adds up agents that ran in parallel. Files "
-           "consulted: unavailable.", "", "## Reading", ""] + (reading or ["- no tasks"]) + [
+           "", "> Median (min–max) over the runs. Tokens as Claude Code reported them (main session plus agent runs), "
+           "compared only with complete coverage. Wall time is the session's; cumulative agent time adds up agents "
+           "that ran in parallel. Files consulted: unavailable.", "",
+           "## Tokens by kind (median)", "",
+           "| Task | Side | Main session | Agent runs | Input | Output | Cache read | Cache write | Agent coverage |",
+           "|---|---|---|---|---|---|---|---|---|"] + kinds + [
+           "", "> Answering without delegating can be the right call: fewer agent tokens isn't better by itself.", "",
+           "## Reading", ""] + (reading or ["- no tasks"]) + [
            "", "> A quality regression is never read as an efficiency gain, and overlapping ranges show no difference."]
     return "\n".join(out) + "\n"

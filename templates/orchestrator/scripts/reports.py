@@ -3,6 +3,8 @@ no model calls. Called by `telemetry.py usage | metrics | report`.
 
 Definitions (what each figure means and what it never stands for):
 - Delegation: an agent run that started (it has an agent id). A failed launch never started and counts apart.
+- Main session: the orchestrator's own session (claude:<session>:main), shown apart: never a delegation, never in
+  the agent runs' coverage, its tokens never added to theirs.
 - Finished: a delegation that stopped (completed or failed). Running ones are "in progress" while their run is
   open and "unfinished" once it closed; they count neither as successes nor as failures.
 - Succeeded: finished without a runtime error, shown as n/m. It says nothing about whether the work is right:
@@ -49,11 +51,12 @@ def _iso(v):
 def _load(db):
     """Every agent run with its run, usage and derived states."""
     usage = {}
-    for inv, source, *tokens in db.execute("SELECT invocation_id, source, " + ", ".join(TOKENS) +
-                                           " FROM usage_records"):
-        u = usage.setdefault(inv, {"reported": False, "tokens": dict.fromkeys(TOKENS, 0)})
+    for inv, source, model, *tokens in db.execute("SELECT invocation_id, source, model, " + ", ".join(TOKENS) +
+                                                  " FROM usage_records"):
+        u = usage.setdefault(inv, {"reported": False, "tokens": dict.fromkeys(TOKENS, 0), "model": None})
         if source == "runtime_reported":
             u["reported"] = True
+            u["model"] = u["model"] or model
             for k, v in zip(TOKENS, tokens):
                 u["tokens"][k] += v or 0
     rows = db.execute(
@@ -66,14 +69,16 @@ def _load(db):
     for (inv, run, project, runtime, model, agent, task, agent_id, status, started, dur, retry, parent,
          run_end, run_ms, run_status) in rows:
         deleg = agent_id is not None
-        finished = deleg and status in ("completed", "success", "failed")
+        main = inv.endswith(":main")
+        finished = (deleg or main) and status in ("completed", "success", "failed")
         running = deleg and not finished
         u = usage.get(inv)
         covered = finished and bool(u and u["reported"])
         out.append({
             "id": inv, "short": agent_id or inv.split(":")[-1], "run_id": run, "project_id": project,
-            "runtime": runtime, "model": model, "agent_type": agent, "task_id": task, "status": status,
-            "started": started or "", "duration": dur, "deleg": deleg, "failed_launch": not deleg and status == "failed",
+            "runtime": runtime, "model": model or (u and u["model"]), "agent_type": agent, "task_id": task,
+            "status": status, "started": started or "", "duration": dur, "deleg": deleg, "main": main,
+            "failed_launch": not deleg and not main and status == "failed",
             "finished": finished, "succeeded": finished and status in ("completed", "success"),
             "in_progress": running and not run_end, "unfinished": running and bool(run_end),
             "covered": covered, "tokens": u["tokens"] if covered and runtime in VERIFIED else None,
@@ -141,7 +146,7 @@ def _sum_tokens(rows):
 
 
 def usage(db, f, by):
-    rows = [r for r in _filter(_load(db), f) if r["deleg"]]
+    rows = [r for r in _filter(_load(db), f) if r["deleg"] or r["main"]]
     if not rows:
         return "No agent runs match these filters.\n"
     label = "Agent · model" if by is None else DIMENSIONS[by][0]
@@ -205,7 +210,7 @@ def metrics(db, f, by, rates_path):
         groups.setdefault(key, [])
     crit, task_status = _criteria(db)
     rates, _, _ = api_cost.load_rates(rates_path)
-    perf, qual, eff = [], [], []
+    perf, qual, eff, mains = [], [], [], []
     for key, g in sorted(groups.items()):
         runs = {r["run_id"]: r["run_ms"] for r in g}
         runs.update(extra.get(key, {}))
@@ -244,6 +249,12 @@ def metrics(db, f, by, rates_path):
             per_passed = _n(total // passed) if passed and total is not None else NA
             value, why = _cost(task_rows, rates)
             cost = why if value is None else "%s %s" % (value[0], (value[1] / len(tasks)).quantize(_CENT))
+        main_rows = [r for r in g if r["main"]]
+        main_tok = _sum_tokens(main_rows)
+        mains.append("| %s | %d | %d/%d | %s |" % (
+            key, len(runs), sum(r["covered"] for r in main_rows), len(runs),
+            " | ".join([NA] * 5 if main_tok is None else [_n(main_tok[k]) for k in TOKENS] +
+                       [_n(sum(main_tok.values()))])))
         retries = sum(r["retry"] for r in deleg)
         eff.append("| %s | %d/%d | %d/%d | %s | %s | %s | %s |" % (
             key, sum(r["covered"] for r in fin), len(fin), len(covered), len(tasks), per_done, per_passed,
@@ -266,7 +277,12 @@ def metrics(db, f, by, rates_path):
            "API-equivalent per task (estimated) |" % label, "|---|---|---|---|---|---|---|"] + eff + [
            "", "> Shown only when every task of the row is fully covered; otherwise incomplete. The cost is "
            "API-equivalent (estimated, combined cache-write rate) at the rates in `.orchestrator/rates.json`: not "
-           "what a subscription (Claude Pro or Max, ChatGPT Plus) costs you.", ""]
+           "what a subscription (Claude Pro or Max, ChatGPT Plus) costs you.", "",
+           "## Main session", "",
+           "| %s | Sessions | Main usage | Input | Output | Cache read | Cache write | Total |" % label,
+           "|---|---|---|---|---|---|---|---|"] + mains + [
+           "", "> The orchestrator's own sessions, read from their transcripts at session end. Not attributed to "
+           "tasks, never added to the agent runs above. Answering without delegating can be the right call.", ""]
     out += _overhead(db)
     return "\n".join(out) + "\n"
 
@@ -301,8 +317,9 @@ def report(db, run, rates_path):
         return None
     run_id, status, ms, runtime, project, started, finished, starts = row
     rows = sorted((r for r in _load(db) if r["run_id"] == run_id), key=lambda r: r["started"])
-    fin = [r for r in rows if r["finished"]]
-    tok = _sum_tokens(rows)
+    fin = [r for r in rows if r["finished"] and r["deleg"]]
+    tok = _sum_tokens([r for r in rows if r["deleg"]])
+    main_tok = _sum_tokens([r for r in rows if r["main"]])
     out = ["# Run %s" % run_id, "",
            "Status %s · wall time %s · runtime %s · project %s" % (status or NA, _secs(ms), runtime or NA,
                                                                    project or NA),
@@ -315,8 +332,9 @@ def report(db, run, rates_path):
         out.append("| %s | %s | %s | %s | %s | %s | %s |" % (
             r["short"], r["agent_type"] or NA, r["task_id"] or NA, r["model"] or NA, state, _secs(r["duration"]),
             _n(sum(r["tokens"].values())) if r["tokens"] else "not available"))
-    out += ["", "Coverage %d/%d · tokens %s (agent runs with reported usage only)" % (
-        sum(r["covered"] for r in fin), len(fin), _n(sum(tok.values())) if tok else NA)]
+    out += ["", "Coverage %d/%d (agent runs) · Main session tokens %s · agent runs tokens %s (reported usage only)" % (
+        sum(r["covered"] for r in fin), len(fin), _n(sum(main_tok.values())) if main_tok else NA,
+        _n(sum(tok.values())) if tok else NA)]
     rates, _, _ = api_cost.load_rates(rates_path)
     value, why = _cost(rows, rates)
     out += ["API-equivalent (estimated, combined cache-write rate): %s. Not what a subscription costs you." % (

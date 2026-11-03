@@ -393,23 +393,30 @@ def _telemetry(ws):
                 u[i] += v or 0
     finally:
         db.close()
-    deleg = [r for r in rows if r[1] is not None]
+    deleg = [r for r in rows if r[1] is not None]  # the main session (claude:<session>:main) has no agent id
     finished = [r for r in deleg if r[5] in ("completed", "success", "failed")]
     covered = [r for r in finished if r[0] in usage]
     agents = {}
     for r in deleg:
         agents[r[2] or "unknown"] = agents.get(r[2] or "unknown", 0) + 1
-    tokens = None
-    if finished and len(covered) == len(finished) and all(r[4] == "claude-code" for r in covered):
-        t = [sum(usage[r[0]][i] for r in covered) for i in range(4)]
-        tokens = {"input": t[0], "output": t[1], "cache_read": t[2], "cache_write": t[3], "total": sum(t)}
+
+    def kinds(invs):
+        t = [sum(usage[i][k] for i in invs) for k in range(4)]
+        return {"input": t[0], "output": t[1], "cache_read": t[2], "cache_write": t[3], "total": sum(t)}
+    tokens = None  # the agent runs': zero when none ran, unknown when any finished one lacks usage
+    if len(covered) == len(finished) and all(r[4] == "claude-code" for r in covered):
+        tokens = kinds([r[0] for r in covered])
+    mains = [r for r in rows if r[0].endswith(":main") and r[4] == "claude-code"]
+    main_tokens = kinds([r[0] for r in mains]) if mains and all(r[0] in usage for r in mains) else None
+    total = None if tokens is None or main_tokens is None else {k: tokens[k] + main_tokens[k] for k in tokens}
     walls = [r[0] for r in runs]
     return {"runs": len(runs), "wall_ms": sum(walls) if walls and None not in walls else None,
             "agent_ms_cumulative": sum(r[6] or 0 for r in finished) if finished else None,
             "delegations": len(deleg), "agents": agents,
             "retries": sum(1 for r in deleg if (r[7] or 0) > 0 and r[8] == "failed"),
             "reinvocations": sum(1 for r in deleg if (r[7] or 0) > 0),
-            "coverage": [len(covered), len(finished)], "tokens": tokens,
+            "coverage": [len(covered), len(finished)], "tokens": tokens, "main_tokens": main_tokens,
+            "total_tokens": total,
             "agent_models": sorted({r[3] for r in deleg if r[3]})}
 
 
