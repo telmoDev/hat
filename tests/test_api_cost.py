@@ -37,9 +37,12 @@ class Rates(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.dir, ignore_errors=True)
 
-    def test_the_template_ships_no_prices(self):
+    def test_the_template_ships_no_prices_and_says_how_cache_writes_are_valued(self):
         with open(os.path.join(os.path.dirname(SCRIPTS), "rates.json")) as f:
-            self.assertEqual(json.load(f)["rates"], [])
+            data = json.load(f)
+        self.assertEqual(data["rates"], [])
+        self.assertIn("5-minute and 1-hour", data["about"])
+        self.assertIn("combined", data["about"])
 
     def test_missing_file_means_no_rates(self):
         rates, version, errors = ac.load_rates(os.path.join(self.dir, "nope.json"))
@@ -77,6 +80,8 @@ class Estimate(unittest.TestCase):
     def test_no_figures_no_cost(self):
         for name, u, rate in (("unavailable usage", self.usage(source="unavailable", input_tokens=None), self.rate),
                               ("estimated usage", self.usage(source="estimated"), self.rate),
+                              # No recorded usage says which runtime_reported figures a calculated one came from.
+                              ("calculated usage", self.usage(source="calculated"), self.rate),
                               ("no rate", self.usage(), None)):
             with self.subTest(name):
                 cost, reason = ac.estimate("claude-code", u, rate)
@@ -118,6 +123,8 @@ class Report(unittest.TestCase):
         self.assertIn("API-equivalent (estimated)", out)
         self.assertIn("not what a subscription", out)
         self.assertIn("5-minute and 1-hour", out)
+        self.assertIn("API-equivalent (estimated, combined cache-write rate)", out)
+        self.assertNotIn("exact cost", out)
         self.assertIn("| model-a | 2 | 1 | USD 0.1005 | test-1 · from 2026-01-01 · https://example.invalid/pricing |",
                       out)
         self.assertIn("| model-b | 1 | 0 | — | no rate for this model |", out)
