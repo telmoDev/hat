@@ -138,8 +138,6 @@ CREATE INDEX usage_by_invocation ON usage_records (invocation_id);
 CREATE INDEX events_by_run ON events (run_id);
 """), (2, """
 CREATE TABLE claude_pending (invocation_id TEXT PRIMARY KEY, run_id TEXT, transcript_path TEXT, stopped_at TEXT);
-"""), (3, """
-CREATE TABLE odd_sync (run_id TEXT PRIMARY KEY, started_at TEXT, ended_at TEXT);
 """)]
 
 
@@ -270,7 +268,7 @@ class Store:
             cid = "%s#%s" % (task, p["criterion_code"])
             last = x("SELECT verified_at FROM criteria WHERE criterion_id = ?", (cid,)).fetchone()
             if last is None or last[0] <= ts:
-                # run_id stays NULL: only sync_criteria knows when a run is shown to have logged the result.
+                # run_id stays NULL: an Evidence line doesn't say which session made the check (sync_criteria).
                 x("INSERT OR REPLACE INTO criteria VALUES (?, ?, ?, ?, ?, ?, ?)",
                   (cid, task, None, p["criterion_code"], p["status"], p.get("verification_method"), ts))
 
@@ -413,31 +411,24 @@ def claude_hook(store, p, env, project, now=None, root=None):
             seen, recorded = seen + 1, recorded + store.record(e)
         store.db.execute("DELETE FROM claude_pending WHERE invocation_id = ?", (inv,))
     if root and kind in ("SessionStart", "SessionEnd") and events:
-        n, r = sync_criteria(store, root, run, "start" if kind == "SessionStart" else "end", now)
+        n, r = sync_criteria(store, root, run, now)
         seen, recorded = seen + n, recorded + r
     return seen, recorded
 
 
 # ODD task files -> criterion.verified and task.* events. The Markdown stays the source of truth; this keeps a
-# projection of it. A criterion's run is set only when the run is shown to have logged it: the Evidence line first
-# appeared between that run's own start and end syncs, with no other run's start sync open (12 h at most).
-# Anything else (history, manual syncs, overlapping sessions) leaves run_id NULL; task_id links it to the agents.
+# projection of it. criteria.run_id stays NULL: an Evidence line names the date, task, criterion and result, not the
+# session that ran the check, and when a line appeared is no evidence of who wrote it. task_id links criteria to the
+# agents that worked on the task.
 _TASK_STATUS = {"pending": "pending", "in progress": "in_progress", "done": "done"}
 
 
-def sync_criteria(store, root, run, phase, now=None):
-    """phase: "start" or "end" of run's session, or "manual" (run None). Returns (events seen, events recorded)."""
+def sync_criteria(store, root, run=None, now=None):
+    """Project the task files; run is the session that reads them (or None for a manual sync), recorded as the
+    events' observer only. Returns (events seen, events recorded)."""
     import odd_tasks  # next to this file
     now, x, seen, recorded = utc(now), store.db.execute, 0, 0
     observer = run or "local:sync-criteria"
-    attribute = False
-    if phase == "end" and run:
-        cutoff = utc(datetime.datetime.strptime(now, "%Y-%m-%dT%H:%M:%S.%fZ").replace(tzinfo=datetime.timezone.utc)
-                     - datetime.timedelta(hours=12))
-        mine = x("SELECT 1 FROM odd_sync WHERE run_id = ? AND ended_at IS NULL", (run,)).fetchone()
-        others = x("SELECT 1 FROM odd_sync WHERE run_id <> ? AND ended_at IS NULL AND started_at >= ?",
-                   (run, cutoff)).fetchone()
-        attribute = bool(mine) and not others
     folder = os.path.join(root, "odd", "tasks")
     names = sorted(n for n in os.listdir(folder) if n.endswith(".md")) if os.path.isdir(folder) else []
     for name in names:
@@ -470,15 +461,7 @@ def sync_criteria(store, root, run, phase, now=None):
                     key = json.dumps(["odd", name, task, code, e["date"], e["result"], occurrences[ident]])
                     ev["event_id"] = "evt_" + hashlib.sha256(key.encode()).hexdigest()[:24]
                     seen += 1
-                    new = store.record(ev)
-                    recorded += new
-                    if new and attribute:
-                        x("UPDATE criteria SET run_id = ? WHERE criterion_id = ? AND verified_at = ?",
-                          (run, "%s#%s" % (task, code), ev["timestamp"]))
-    if run and phase == "start":
-        x("INSERT OR REPLACE INTO odd_sync VALUES (?, ?, NULL)", (run, now))
-    elif run and phase == "end":
-        x("UPDATE odd_sync SET ended_at = ? WHERE run_id = ?", (now, run))
+                    recorded += store.record(ev)
     return seen, recorded
 
 
@@ -551,7 +534,7 @@ def main(argv):
             return 0
     root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     if argv[1] == "sync-criteria":
-        ingest("sync-criteria", lambda store: sync_criteria(store, root, None, "manual"), path)
+        ingest("sync-criteria", lambda store: sync_criteria(store, root), path)
         return 0
     text = sys.stdin.read()
     if argv[1] == "ingest":

@@ -16,10 +16,9 @@ into the new version's section.
   or its output) and its *Tasks* statuses into the store, as `criterion.verified` and `task.*` events. The
   Markdown stays the source of truth: nothing is written back, and the projection can be rebuilt.
   - Criteria link to agent runs through the task (`<feature>#T<n>`), the id the brief's header gives.
-  - A criterion's `run_id` is set only when that run is shown to have logged it: the line appeared between the
-    run's own start and end syncs, and no other run had a start sync open (12 h at most). History, manual syncs
-    and overlapping sessions leave it NULL (migration 3: `odd_sync`). Limitation: a person editing a task file
-    during the only open session would be attributed to it.
+  - A criterion's `run_id` stays NULL: an *Evidence* line names the date, task, criterion and result, not the
+    session that ran the check, and when a line appeared is no evidence of who wrote it. Attribution to a run
+    needs explicit evidence that the run made the check, which the task file doesn't carry today.
   - A replayed or moved line is the same event; a later result on the same day wins.
   - A small task has no task file: its criteria (in its PR body) are not recorded.
   - `odd_tasks.py`: the task-file parser, moved out of `memory-check.py` unchanged and shared with the telemetry.
