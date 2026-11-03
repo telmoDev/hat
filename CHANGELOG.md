@@ -15,11 +15,15 @@ into the new version's section.
   provider's API, at the rates in `.orchestrator/rates.json`. Always labelled an estimate, with the rates' version,
   date and source, and a warning that it is not what a subscription (Claude Pro or Max, ChatGPT Plus) costs.
   - `rates.json` ships empty: no price is assumed. Entries are checked; a bad one is left out and named.
-  - The rate in force on the invocation's day applies. Only `runtime_reported` or `calculated` usage is priced;
-    anything else, a missing rate or an unverified runtime is shown as not priced, with the reason. `Decimal`.
+  - The rate in force on the invocation's day applies. Only `runtime_reported` usage is priced: never estimated
+    or inferred figures, nor `calculated` ones (allowed only as a deterministic calculation from runtime_reported
+    figures, which no record can show today). Anything else, a missing rate or an unverified runtime is shown as
+    not priced, with the reason. `Decimal`.
   - Rule: Claude Code (Anthropic: input excludes cache). Codex has none until its real figures are checked.
-  - Limitation: Anthropic's 5-minute and 1-hour cache writes come as one figure, priced at the single
-    `cache_write` rate, so even exact rates don't give an exact cost.
+  - Cache writes: Anthropic prices 5-minute and 1-hour writes differently, and the transcripts give them as one
+    figure. The sum is valued at the single, combined `cache_write` rate of `rates.json` (the 5-minute rate
+    undervalues 1-hour writes, the 1-hour rate overvalues 5-minute ones), so the report is titled "estimated,
+    combined cache-write rate" and is never an exact API cost.
 
   **Workspaces**: copy `api_cost.py` and `telemetry.py` into `.orchestrator/scripts/`, and add
   `.orchestrator/rates.json` from the template (empty) if you want the estimate.

@@ -3,11 +3,15 @@ workspace keeps in .orchestrator/rates.json. Always an estimate, never a subscri
 Claude Pro or Max, or ChatGPT Plus, has no per-token price. Called by `telemetry.py cost`.
 
 The rates file ships empty: prices are the user's to add, each with its date and source, so none is assumed here.
-Only usage with a verifiable source (runtime_reported or calculated) is priced. A runtime is priced only with a
-rule checked against its real figures: Claude Code (Anthropic: input excludes cache reads and writes). Codex
-reports cached input inside input_tokens; its rule waits for real payloads.
-Limitation: the transcripts give Anthropic's 5-minute and 1-hour cache writes as one figure, priced at the single
-cache_write rate, so even with exact rates the result is not exact.
+Only runtime_reported usage is priced. Estimated or inferred figures never are, and neither is `calculated` usage:
+it would be allowed only as a deterministic calculation from runtime_reported figures, and no record says which
+figures it came from (no adapter produces it today). A runtime is priced only with a rule checked against its real
+figures: Claude Code (Anthropic: input excludes cache reads and writes). Codex reports cached input inside
+input_tokens; its rule waits for real payloads.
+Cache writes: Anthropic prices 5-minute and 1-hour cache writes differently, and the transcripts give them as one
+figure. That sum is priced at the single, combined `cache_write` rate the rates file gives, chosen by the user (the
+5-minute rate undervalues 1-hour writes, the 1-hour rate overvalues 5-minute ones). So the result is an estimate at
+a combined rate, never an exact API cost, even with exact prices.
 """
 import datetime
 import json
@@ -72,7 +76,7 @@ def estimate(runtime, usage, rate):
     """(Decimal cost, None), or (None, why it can't be estimated)."""
     if runtime not in PROVIDER:
         return None, "no verified pricing rule for %s usage yet" % (runtime or "unknown runtime")
-    if usage.get("source") not in ("runtime_reported", "calculated"):
+    if usage.get("source") != "runtime_reported":
         return None, "usage %s" % (usage.get("source") or "missing")
     if rate is None:
         return None, "no rate for this model"
@@ -84,11 +88,12 @@ def estimate(runtime, usage, rate):
 def report(db, rates_path):
     """The API-equivalent estimate per model, as Markdown."""
     rates, version, errors = load_rates(rates_path)
-    out = ["## API-equivalent (estimated)", "",
+    out = ["## API-equivalent (estimated, combined cache-write rate)", "",
            "> What this usage would cost through the provider's API, at the rates in `.orchestrator/rates.json`"
            " (version %s). It is not what a subscription (Claude Pro or Max, ChatGPT Plus) costs you: a plan has"
            " no per-token price. Anthropic cache writes: the transcripts give the 5-minute and 1-hour cache writes"
-           " as one figure, priced at the single `cache_write` rate, so the figure is not exact." % (version or "—"),
+           " as one figure, valued at the single, combined `cache_write` rate of the rates file, so this is an"
+           " estimate, not the API's actual charge. Only usage the runtime reported is priced." % (version or "—"),
            ""]
     if not rates:
         out.append("No rates in `.orchestrator/rates.json`: add the provider's published prices, each with the date"
