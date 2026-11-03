@@ -54,6 +54,26 @@ class Transcript(unittest.TestCase):
             "input_tokens": 8, "output_tokens": 110, "cache_read_tokens": 1000, "cache_write_tokens": 50,
             "requests": 2}})
 
+    def test_a_streamed_request_keeps_its_final_output(self):
+        # Observed in real transcripts: a request's lines repeat its usage, output_tokens growing while it streams.
+        models, reason = ct.usage(self.write(line("m1", out=21), line("m1", out=396), line("m1", out=396)))
+        self.assertIsNone(reason)
+        self.assertEqual((models["claude-sonnet-5-5"]["output_tokens"], models["claude-sonnet-5-5"]["requests"]),
+                         (396, 1))
+
+    def test_inconsistent_repeats_are_unavailable(self):
+        cases = {
+            "model changes": (line("m1"), line("m1", model="claude-opus-5-5")),
+            "input changes": (line("m1"), line("m1", inp=4)),
+            "cache changes": (line("m1"), line("m1", cread=999)),
+            "output shrinks": (line("m1", out=100), line("m1", out=99)),
+        }
+        for name, rows in cases.items():
+            with self.subTest(name):
+                models, reason = ct.usage(self.write(*rows))
+                self.assertIsNone(models)
+                self.assertIn("inconsistent", reason)
+
     def test_models_are_kept_apart_and_synthetic_messages_skipped(self):
         p = self.write(line("m1"), line("m2", model="claude-haiku-5-5", inp=1, out=1, cread=0, cwrite=0),
                        line("m3", model="<synthetic>", inp=0, out=0, cread=0, cwrite=0))
@@ -121,6 +141,23 @@ class Adapter(unittest.TestCase):
                     tool_response={"status": "async_launched", "agentId": "a2"})
         self.assertEqual(self.events(p)[0]["task_id"], "fix-typo-1")
 
+    def test_real_header_variants(self):
+        # Shapes taken from real orchestrator briefs (feature names changed).
+        cases = {
+            "Task: odd/tasks/login.md › T2 review · Tier: normal": "login#T2",
+            "Task: odd/tasks/login.md › T1 (TL review round 1) · Tier: normal": "login#T1",
+            "Task: odd/tasks/login.md · Tier: normal": "login",
+            "Task: fix-typo-1 · Tier: trivial": "fix-typo-1",
+            "\n  Task: odd/tasks/login.md › T3 · Tier: hard\nbody": "login#T3",
+            "Context first\nTask: odd/tasks/login.md › T2 · Tier: normal": None,
+            "Task: odd/tasks/login.md › T2\n· Tier: normal": None,
+        }
+        for prompt, want in cases.items():
+            with self.subTest(prompt):
+                p = payload("PostToolUse", tool_name="Agent", tool_input={"prompt": prompt},
+                            tool_response={"status": "async_launched", "agentId": "a9"})
+                self.assertEqual(self.events(p)[0]["task_id"], want)
+
     def test_no_header_no_task(self):
         p = payload("PostToolUse", tool_name="Agent", tool_input={"prompt": "look around"},
                     tool_response={"status": "async_launched", "agentId": "a3"})
@@ -151,9 +188,27 @@ class Adapter(unittest.TestCase):
         _, off = self.events(stop, TELEMETRY_TRANSCRIPTS="off")
         self.assertEqual((off["payload"]["source"], off["payload"].get("input_tokens")), ("unavailable", None))
 
-    def test_failed_launch(self):
-        [e] = self.events(payload("PostToolUseFailure", tool_name="Agent", tool_use_id="toolu_9", error="boom"))
-        self.assertEqual((e["event_type"], e["invocation_id"]), ("agent.failed", "claude:toolu_9"))
+    def test_failed_launch_keeps_category_and_duration_only(self):
+        for interrupt, category in ((False, "error"), (True, "interrupt")):
+            with self.subTest(category):
+                [e] = self.events(payload("PostToolUseFailure", tool_name="Agent", tool_use_id="toolu_9",
+                                          tool_input={"subagent_type": "api-dev", "prompt": "Task: login-1 · Tier: x"},
+                                          error="Permission denied: SECRET path", is_interrupt=interrupt,
+                                          duration_ms=4187))
+                self.assertEqual((e["event_type"], e["invocation_id"]), ("agent.failed", "claude:tool:toolu_9"))
+                self.assertEqual(e["payload"]["error"], category)
+                self.assertEqual((e["payload"]["duration_ms"], e["payload"]["duration_source"]),
+                                 (4187, "runtime_reported"))
+                self.assertNotIn("agent_id", e["payload"])
+                self.assertNotIn("SECRET", json.dumps(e))
+
+    def test_claude_code_internal_agents_are_not_recorded(self):
+        # SubagentStop also fires for Claude Code's own agents (prompt suggestions, /btw), with agent_type "" when
+        # the session runs without --agent (hooks reference). Agent-tool subagents always carry their name.
+        for kind in ("SubagentStart", "SubagentStop"):
+            with self.subTest(kind):
+                self.assertEqual(self.events(payload(kind, agent_id="a1", agent_type="")), [])
+        self.assertEqual(len(self.events(payload("SubagentStart", agent_id="a1"))), 1)  # absent is not empty
 
     def test_other_hooks_and_tools_record_nothing(self):
         self.assertEqual(self.events(payload("PostToolUse", tool_name="Write")), [])
@@ -184,18 +239,51 @@ class Projection(unittest.TestCase):
         self.assertEqual(row, ("completed", "2026-11-03T10:00:00.000Z", "login#T2", 60000))
 
     def test_a_later_attempt_at_the_same_task_is_a_retry(self):
-        self.rec("agent.started", "claude:a1", "2026-11-03T10:00:00Z", task="login#T2", agent_type="api-dev")
-        self.rec("agent.started", "claude:a2", "2026-11-03T11:00:00Z", task="login#T2", agent_type="api-dev")
-        self.rec("agent.started", "claude:a3", "2026-11-03T11:30:00Z", task="login#T2", agent_type="explorer")
+        self.rec("agent.started", "claude:a1", "2026-11-03T10:00:00Z", task="login#T2", agent_type="api-dev", agent_id="a1")
+        self.rec("agent.started", "claude:a2", "2026-11-03T11:00:00Z", task="login#T2", agent_type="api-dev", agent_id="a2")
+        self.rec("agent.started", "claude:a3", "2026-11-03T11:30:00Z", task="login#T2", agent_type="explorer", agent_id="a3")
         rows = self.s.db.execute("SELECT invocation_id, retry_number, parent_invocation_id FROM agent_invocations "
                                  "ORDER BY invocation_id").fetchall()
         self.assertEqual(rows, [("claude:a1", 0, None), ("claude:a2", 1, "claude:a1"), ("claude:a3", 0, None)])
+
+    def test_a_launch_that_never_started_is_not_an_attempt(self):
+        self.rec("agent.failed", "claude:tool:toolu_9", "2026-11-03T10:00:00Z", task="login#T2", agent_type="api-dev",
+                 error="error")
+        self.rec("agent.started", "claude:a2", "2026-11-03T10:05:00Z", task="login#T2", agent_type="api-dev",
+                 agent_id="a2")
+        self.rec("agent.started", "claude:a3", "2026-11-03T10:30:00Z", task="login#T2", agent_type="api-dev",
+                 agent_id="a3")
+        rows = self.s.db.execute("SELECT invocation_id, retry_number, parent_invocation_id FROM agent_invocations "
+                                 "ORDER BY invocation_id").fetchall()
+        self.assertEqual(rows, [("claude:a2", 0, None), ("claude:a3", 1, "claude:a2"),
+                                ("claude:tool:toolu_9", 0, None)])
 
     def test_a_continued_agent_replaces_its_usage(self):
         for n, inp in ((1, 10), (2, 25)):
             self.rec("usage.reported", "claude:a1", "2026-11-03T10:0%d:00Z" % n, key="claude-sonnet-5-5@%d" % n,
                      source="runtime_reported", model="claude-sonnet-5-5", input_tokens=inp, requests=n)
         self.assertEqual(self.s.db.execute("SELECT count(*), sum(input_tokens) FROM usage_records").fetchone(), (1, 25))
+
+
+class HookConfig(unittest.TestCase):
+    """claude -p kills async hooks still running at teardown (hooks reference, "async hooks"), so every telemetry hook
+    whose event can come last is synchronous, with a timeout short enough not to hold the session's exit."""
+
+    def test_events_that_can_end_a_session_are_synchronous_and_bounded(self):
+        with open(os.path.join(os.path.dirname(HERE), "templates", "claude", "settings.json")) as f:
+            hooks = json.load(f)["hooks"]
+        seen = set()
+        for event, groups in hooks.items():
+            for g in groups:
+                for h in g["hooks"]:
+                    if "telemetry.sh" not in h["command"]:
+                        continue
+                    seen.add(event)
+                    self.assertLessEqual(h.get("timeout", 600), 5, event)
+                    if event != "SessionStart":
+                        self.assertFalse(h.get("async"), event)
+        self.assertEqual(seen, {"SessionStart", "SessionEnd", "SubagentStart", "SubagentStop", "PostToolUse",
+                                "PostToolUseFailure"})
 
 
 class Hook(unittest.TestCase):
