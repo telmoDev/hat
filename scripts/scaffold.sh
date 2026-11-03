@@ -135,6 +135,7 @@ for f in "$tpl"/memory/*.md; do render "$f" "$root/memory/$(basename "$f")" || t
 render "$tpl/odd/README.md" "$root/odd/README.md" || true
 render "$tpl/orchestrator/orchestrator.conf" "$root/.orchestrator/orchestrator.conf" || true
 render "$tpl/orchestrator/pre-pr-checklist.md" "$root/.orchestrator/pre-pr-checklist.md" || true
+render "$tpl/orchestrator/rates.json" "$root/.orchestrator/rates.json" || true
 for f in "$tpl"/orchestrator/scripts/* "$tpl"/orchestrator/hooks/*; do
   [ -f "$f" ] || continue  # e.g. a __pycache__ left by a local py_compile
   rel=${f#$tpl/orchestrator/}; render "$f" "$root/.orchestrator/$rel" || true

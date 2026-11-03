@@ -26,6 +26,23 @@ into the new version's section.
   **Workspaces**: copy `odd_tasks.py` with `memory-check.py` into `.orchestrator/scripts/` (the new
   `memory-check.py` imports it), plus `telemetry.py`.
 
+- API-equivalent cost (`telemetry.py cost`, `api_cost.py`): what the recorded usage would cost through the
+  provider's API, at the rates in `.orchestrator/rates.json`. Always labelled an estimate, with the rates' version,
+  date and source, and a warning that it is not what a subscription (Claude Pro or Max, ChatGPT Plus) costs.
+  - `rates.json` ships empty: no price is assumed. Entries are checked; a bad one is left out and named.
+  - The rate in force on the invocation's day applies. Only `runtime_reported` usage is priced: never estimated
+    or inferred figures, nor `calculated` ones (allowed only as a deterministic calculation from runtime_reported
+    figures, which no record can show today). Anything else, a missing rate or an unverified runtime is shown as
+    not priced, with the reason. `Decimal`.
+  - Rule: Claude Code (Anthropic: input excludes cache). Codex has none until its real figures are checked.
+  - Cache writes: Anthropic prices 5-minute and 1-hour writes differently, and the transcripts give them as one
+    figure. The sum is valued at the single, combined `cache_write` rate of `rates.json` (the 5-minute rate
+    undervalues 1-hour writes, the 1-hour rate overvalues 5-minute ones), so the report is titled "estimated,
+    combined cache-write rate" and is never an exact API cost.
+
+  **Workspaces**: copy `api_cost.py` and `telemetry.py` into `.orchestrator/scripts/`, and add
+  `.orchestrator/rates.json` from the template (empty) if you want the estimate.
+
 - Local operational telemetry, part 1 (the core; no hook calls it yet):
   - `.orchestrator/scripts/telemetry.py`: a versioned event contract (`schema_version` 1: run, task, agent,
     usage, criterion and blocked events), checked on the way in. Each payload key must be in the contract and

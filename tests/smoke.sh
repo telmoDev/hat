@@ -63,6 +63,8 @@ $py -c 'import sqlite3,sys; sys.exit(sqlite3.connect(".orchestrator/telemetry/te
   || die "the telemetry hook records a session"
 ok "the telemetry hook records a session"
 run "telemetry sync-criteria" $py .orchestrator/scripts/telemetry.py sync-criteria
+run "telemetry cost without rates" $py .orchestrator/scripts/telemetry.py cost
+grep -q "No rates" "$tmp/out" || die "cost says there are no rates"
 run "skill copies in sync" bash .orchestrator/scripts/sync-skills.sh --check
 if $py -c 'import tomllib' 2>/dev/null; then
   run "Codex TOML parses" $py -c "import tomllib,sys; [tomllib.load(open(f,'rb')) for f in sys.argv[1:]]" .codex/*.toml .codex/agents/*.toml

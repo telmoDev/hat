@@ -3,6 +3,7 @@
   python3 .orchestrator/scripts/telemetry.py ingest < events.json   (a JSON event, a list, or one per line)
   python3 .orchestrator/scripts/telemetry.py hook claude < payload    (a Claude Code hook's input)
   python3 .orchestrator/scripts/telemetry.py sync-criteria             (the ODD task files' criteria and tasks)
+  python3 .orchestrator/scripts/telemetry.py cost                      (API-equivalent estimate, Markdown)
 Hooks call it through .orchestrator/hooks/telemetry.sh, which never fails the session and prints nothing.
 The store is .orchestrator/telemetry/telemetry.db (ORCH_TELEMETRY_DB overrides it), errors go to errors.log next
 to it, and each call logs its own duration in ingest_log, so the instrumentation's overhead is measured too.
@@ -523,6 +524,20 @@ def ingest(command, work, path):
 
 
 def main(argv):
+    if argv[1:2] == ["cost"]:  # a report: prints, unlike the hook commands
+        import api_cost  # next to this file
+        here = os.path.dirname(os.path.abspath(__file__))
+        rates = os.environ.get("ORCH_RATES") or os.path.join(os.path.dirname(here), "rates.json")
+        path = db_path()
+        if not os.path.exists(path):
+            print("No telemetry recorded yet (%s)." % path)
+            return 0
+        store = Store(path)
+        try:
+            sys.stdout.write(api_cost.report(store.db, rates))
+        finally:
+            store.close()
+        return 0
     if argv[1:2] not in (["ingest"], ["sync-criteria"]) and argv[1:3] != ["hook", "claude"]:
         print(__doc__.strip(), file=sys.stderr)
         return 2
