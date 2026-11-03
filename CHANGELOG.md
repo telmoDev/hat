@@ -11,6 +11,21 @@ into the new version's section.
 
 ## Unreleased
 
+- Local operational telemetry, part 3 (ODD criteria): `telemetry.py sync-criteria`, also run by the SessionStart
+  and SessionEnd hooks, projects each task file's *Evidence* results (criterion, result, date; never the command
+  or its output) and its *Tasks* statuses into the store, as `criterion.verified` and `task.*` events. The
+  Markdown stays the source of truth: nothing is written back, and the projection can be rebuilt.
+  - Criteria link to agent runs through the task (`<feature>#T<n>`), the id the brief's header gives.
+  - A criterion's `run_id` stays NULL: an *Evidence* line names the date, task, criterion and result, not the
+    session that ran the check, and when a line appeared is no evidence of who wrote it. Attribution to a run
+    needs explicit evidence that the run made the check, which the task file doesn't carry today.
+  - A replayed or moved line is the same event; a later result on the same day wins.
+  - A small task has no task file: its criteria (in its PR body) are not recorded.
+  - `odd_tasks.py`: the task-file parser, moved out of `memory-check.py` unchanged and shared with the telemetry.
+
+  **Workspaces**: copy `odd_tasks.py` with `memory-check.py` into `.orchestrator/scripts/` (the new
+  `memory-check.py` imports it), plus `telemetry.py`.
+
 - API-equivalent cost (`telemetry.py cost`, `api_cost.py`): what the recorded usage would cost through the
   provider's API, at the rates in `.orchestrator/rates.json`. Always labelled an estimate, with the rates' version,
   date and source, and a warning that it is not what a subscription (Claude Pro or Max, ChatGPT Plus) costs.

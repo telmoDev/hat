@@ -9,6 +9,7 @@ Rules:
 - **A task is `done` only with evidence**: its criteria rerun by the orchestrator and logged under *Evidence* with the real result. Code written or a test attempted is not evidence. A criterion that couldn't be verified stays `pending`.
 - **Figures are reported, never estimated.** The *Run log* takes the tokens and duration the tool reported, or `not reported`.
 - **Links, not copies.** When the repo keeps specs or decision records, link them. `memory/` links to this file and never copies it.
+- The local telemetry reads the *Tasks* table and the *Evidence* lines (criterion, result and date only, never the command or its output) to relate criteria to the agents that worked on each task. It never writes here.
 - `memory-check.py` holds these files to their rules: no secrets or personal data, no task `done` without an *Evidence* line naming it, no `Status: done` while a task isn't, and the *In flight* cell `N/M passed` in `memory/PROJECT_STATE.md` must match the *Evidence* (each criterion's last result). Keep the shapes below so it can read them.
 - When the feature is done (every task `done`, its PRs merged), set `Status: done`. The file stays as the record.
 

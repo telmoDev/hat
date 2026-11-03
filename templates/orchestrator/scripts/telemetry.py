@@ -2,6 +2,7 @@
 """Local operational telemetry: the event contract and the SQLite store it projects into.
   python3 .orchestrator/scripts/telemetry.py ingest < events.json   (a JSON event, a list, or one per line)
   python3 .orchestrator/scripts/telemetry.py hook claude < payload    (a Claude Code hook's input)
+  python3 .orchestrator/scripts/telemetry.py sync-criteria             (the ODD task files' criteria and tasks)
   python3 .orchestrator/scripts/telemetry.py cost                      (API-equivalent estimate, Markdown)
 Hooks call it through .orchestrator/hooks/telemetry.sh, which never fails the session and prints nothing.
 The store is .orchestrator/telemetry/telemetry.db (ORCH_TELEMETRY_DB overrides it), errors go to errors.log next
@@ -202,8 +203,10 @@ class Store:
         x, kind, p, ts, run = self.db.execute, e["event_type"], e["payload"], e["timestamp"], e["run_id"]
         task, inv = e.get("task_id"), e.get("invocation_id")
         if task:
+            # Only an agent's work shows which run a task started in; a task file read at sync time doesn't.
+            mine = kind.startswith("agent.")
             x("INSERT OR IGNORE INTO tasks (task_id, run_id, started_at, status) VALUES (?, ?, ?, 'in_progress')",
-              (task, run, ts))
+              (task, run if mine else None, ts if mine else None))
         if kind == "run.started":
             # A resumed or compacted session is the same run: it reopens, keeping its first start.
             x("INSERT OR IGNORE INTO runs (run_id, started_at) VALUES (?, ?)", (run, ts))
@@ -266,8 +269,9 @@ class Store:
             cid = "%s#%s" % (task, p["criterion_code"])
             last = x("SELECT verified_at FROM criteria WHERE criterion_id = ?", (cid,)).fetchone()
             if last is None or last[0] <= ts:
+                # run_id stays NULL: an Evidence line doesn't say which session made the check (sync_criteria).
                 x("INSERT OR REPLACE INTO criteria VALUES (?, ?, ?, ?, ?, ?, ?)",
-                  (cid, task, run, p["criterion_code"], p["status"], p.get("verification_method"), ts))
+                  (cid, task, None, p["criterion_code"], p["status"], p.get("verification_method"), ts))
 
     def _number_attempt(self, inv, task):
         """retry_number = earlier invocations of the same agent type on the same task; parent = the last of them."""
@@ -382,7 +386,7 @@ def claude_events(p, env, project, now=None):
 _SETTLE_S = 2
 
 
-def claude_hook(store, p, env, project, now=None):
+def claude_hook(store, p, env, project, now=None, root=None):
     """Record a Claude Code hook's events, then read the pending transcripts that have had time to catch up."""
     now = utc(now)
     events = claude_events(p, env, project, now)
@@ -407,6 +411,58 @@ def claude_hook(store, p, env, project, now=None):
         for e in _usage_events(prun, inv, models, reason, claude_transcript.PARSER_VERSION, now):
             seen, recorded = seen + 1, recorded + store.record(e)
         store.db.execute("DELETE FROM claude_pending WHERE invocation_id = ?", (inv,))
+    if root and kind in ("SessionStart", "SessionEnd") and events:
+        n, r = sync_criteria(store, root, run, now)
+        seen, recorded = seen + n, recorded + r
+    return seen, recorded
+
+
+# ODD task files -> criterion.verified and task.* events. The Markdown stays the source of truth; this keeps a
+# projection of it. criteria.run_id stays NULL: an Evidence line names the date, task, criterion and result, not the
+# session that ran the check, and when a line appeared is no evidence of who wrote it. task_id links criteria to the
+# agents that worked on the task.
+_TASK_STATUS = {"pending": "pending", "in progress": "in_progress", "done": "done"}
+
+
+def sync_criteria(store, root, run=None, now=None):
+    """Project the task files; run is the session that reads them (or None for a manual sync), recorded as the
+    events' observer only. Returns (events seen, events recorded)."""
+    import odd_tasks  # next to this file
+    now, x, seen, recorded = utc(now), store.db.execute, 0, 0
+    observer = run or "local:sync-criteria"
+    folder = os.path.join(root, "odd", "tasks")
+    names = sorted(n for n in os.listdir(folder) if n.endswith(".md")) if os.path.isdir(folder) else []
+    for name in names:
+        feature = name[:-3]
+        with open(os.path.join(folder, name), encoding="utf-8") as f:
+            body = f.read()
+        for tid, title, status in odd_tasks.task_rows(body):
+            st = "blocked" if status.lower().startswith("blocked") else _TASK_STATUS.get(status.lower())
+            task = "%s#%s" % (feature, tid)
+            row = x("SELECT status FROM tasks WHERE task_id = ?", (task,)).fetchone()
+            if st is None or (row and row[0] == st):
+                continue
+            seen += 1
+            recorded += store.record(make_event("task.completed" if st == "done" else "task.started", observer,
+                                                task_id=task, timestamp=now,
+                                                payload={"status": st, "title": title[:MAX_STR]}))
+        occurrences = {}
+        for e in odd_tasks.evidence(body):
+            if not e["date"]:
+                continue
+            for tid in e["tasks"] or [None]:
+                task = "%s#%s" % (feature, tid) if tid else feature
+                for code in e["criteria"]:
+                    ident = (task, code, e["date"], e["result"])
+                    occurrences[ident] = occurrences.get(ident, 0) + 1
+                    ev = make_event("criterion.verified", observer, task_id=task, timestamp=e["date"] + "T00:00:00Z",
+                                    payload={"criterion_code": code, "status": e["result"],
+                                             "verification_method": e["method"]})
+                    # The same line read by any run, in any position in the file, is the same event.
+                    key = json.dumps(["odd", name, task, code, e["date"], e["result"], occurrences[ident]])
+                    ev["event_id"] = "evt_" + hashlib.sha256(key.encode()).hexdigest()[:24]
+                    seen += 1
+                    recorded += store.record(ev)
     return seen, recorded
 
 
@@ -482,7 +538,7 @@ def main(argv):
         finally:
             store.close()
         return 0
-    if argv[1:2] != ["ingest"] and argv[1:3] != ["hook", "claude"]:
+    if argv[1:2] not in (["ingest"], ["sync-criteria"]) and argv[1:3] != ["hook", "claude"]:
         print(__doc__.strip(), file=sys.stderr)
         return 2
     path = db_path()
@@ -491,13 +547,16 @@ def main(argv):
             os.makedirs(os.path.dirname(path))
         except OSError:
             return 0
+    root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    if argv[1] == "sync-criteria":
+        ingest("sync-criteria", lambda store: sync_criteria(store, root), path)
+        return 0
     text = sys.stdin.read()
     if argv[1] == "ingest":
         ingest("ingest", lambda store: _record_all(store, _read_events(text)), path)
     else:
-        root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        ingest("hook claude", lambda store: claude_hook(store, json.loads(text), os.environ, os.path.basename(root)),
-               path)
+        ingest("hook claude", lambda store: claude_hook(store, json.loads(text), os.environ, os.path.basename(root),
+                                                        root=root), path)
     return 0
 
 

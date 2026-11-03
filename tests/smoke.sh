@@ -62,6 +62,7 @@ echo '{"hook_event_name":"SessionStart","session_id":"smoke","source":"startup"}
 $py -c 'import sqlite3,sys; sys.exit(sqlite3.connect(".orchestrator/telemetry/telemetry.db").execute("select count(*) from runs").fetchone()[0] != 1)' \
   || die "the telemetry hook records a session"
 ok "the telemetry hook records a session"
+run "telemetry sync-criteria" $py .orchestrator/scripts/telemetry.py sync-criteria
 run "telemetry cost without rates" $py .orchestrator/scripts/telemetry.py cost
 grep -q "No rates" "$tmp/out" || die "cost says there are no rates"
 run "skill copies in sync" bash .orchestrator/scripts/sync-skills.sh --check
