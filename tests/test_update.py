@@ -283,6 +283,18 @@ class Partial(Workspace):
         self.assertIn("--dev", out)
 
 
+class Changelog(unittest.TestCase):
+    def test_manual_steps_of_every_release_since_the_workspace(self):
+        sys.path.insert(0, os.path.join(REPO, "scripts"))
+        import update
+        steps = "\n".join(update.changelog_steps("0.5.1", "0.7.0", True))
+        self.assertIn("### v0.7.0", steps)
+        self.assertIn("### v0.6.0", steps)
+        self.assertNotIn("### v0.5.1", steps)
+        self.assertNotIn("### Unreleased", steps)
+        self.assertIn("### Unreleased", "\n".join(update.changelog_steps("0.7.0", "0.7.0", False)))
+
+
 class NewerStore(unittest.TestCase):
     """A store written by a newer orchestrator is never modified nor migrated down."""
 
