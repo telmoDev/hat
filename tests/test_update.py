@@ -283,6 +283,56 @@ class Partial(Workspace):
         self.assertIn("--dev", out)
 
 
+class DevToRelease(Workspace):
+    """A workspace updated with --dev from an unreleased skill, then updated without it once the release is out."""
+
+    def dev_skill(self):
+        skill = os.path.join(tempfile.mkdtemp(dir=self.tmp), "skill")
+        git("clone", "-q", self.skill, skill, env=self.env)
+        git("tag", "-d", "v0.8.0", cwd=skill, env=self.env)  # the same tree, before its release
+        return skill
+
+    def release(self, skill, *changes):
+        for change in changes:
+            with open(os.path.join(skill, "templates", "orchestrator", "scripts", change), "a") as f:
+                f.write("# changed after the --dev snapshot\n")
+        if changes:
+            git("commit", "-qam", "a later change", cwd=skill, env=self.env)
+        git("tag", "v0.8.0", cwd=skill, env=self.env)
+
+    def test_a_release_equal_to_the_snapshot_needs_no_new_copies(self):
+        skill = self.dev_skill()
+        code, out = self.update("--dev", skill=skill)
+        self.assertEqual(code, 0, out)
+        self.assertIn("for testing", out)
+        self.commit()
+        self.release(skill)
+        code, out = self.update(skill=skill)
+        self.assertEqual(code, 0, out)
+        self.assertIn('TEMPLATE_VERSION="0.8.0"', self.read(".orchestrator/orchestrator.conf"))
+        self.assertNotIn("new    ", out)  # nothing kept as changed: the files already are v0.8.0's
+        news = [f for d, _, fs in os.walk(self.path(".orchestrator")) for f in fs if f.endswith(".new")]
+        self.assertEqual(news, ["push-pr.sh.new"])  # only the user's own change, from the first run
+
+    def test_a_file_the_snapshot_wrote_and_the_release_changed_comes_as_a_new_copy(self):
+        skill = self.dev_skill()
+        self.update("--dev", skill=skill)
+        self.commit()
+        self.release(skill, "telemetry.py", "memory-state.sh")
+        before = self.read(".orchestrator/scripts/telemetry.py")
+        code, out = self.update(skill=skill)
+        self.assertEqual(code, 0, out)
+        # telemetry.py was written by --dev and changed again: it matches neither v0.7.0 nor v0.8.0, so it is
+        # treated as the user's and kept, with the release next to it.
+        self.assertEqual(self.read(".orchestrator/scripts/telemetry.py"), before)
+        self.assertTrue(self.read(".orchestrator/scripts/telemetry.py.new").endswith(
+            "# changed after the --dev snapshot\n"))
+        # memory-state.sh was still v0.7.0's (the snapshot didn't change it): updated as usual.
+        self.assertTrue(self.read(".orchestrator/scripts/memory-state.sh").endswith(
+            "# changed after the --dev snapshot\n"))
+        self.assertIn('TEMPLATE_VERSION="0.8.0"', self.read(".orchestrator/orchestrator.conf"))
+
+
 class Changelog(unittest.TestCase):
     def test_manual_steps_of_every_release_since_the_workspace(self):
         sys.path.insert(0, os.path.join(REPO, "scripts"))
