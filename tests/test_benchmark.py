@@ -16,6 +16,8 @@ import unittest
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(HERE)
 BENCH = os.path.join(REPO, "benchmark")
+# No test may start a model session: `run` refuses while this is set, in this process and every subprocess.
+os.environ["ORCH_BENCH_NO_MODEL"] = "1"
 sys.path.insert(0, os.path.join(REPO, "scripts"))
 sys.path.insert(0, os.path.join(REPO, "templates", "orchestrator", "scripts"))
 import benchmark as bm  # noqa: E402
@@ -160,6 +162,34 @@ class Hash(unittest.TestCase):
             h = bm.task_hash("B3", base)
 
 
+class HashCoversTheChecksAndTheSession(unittest.TestCase):
+    """Anything that changes the expected result or the session changes the hash, not only the task's files."""
+
+    def test_check_code_and_run_settings(self):
+        h = bm.task_hash("B1")
+        saved = bm.B1_FUNCTIONS
+        bm.B1_FUNCTIONS = saved | {"catalog.get"}
+        try:
+            self.assertNotEqual(bm.task_hash("B1"), h)
+        finally:
+            bm.B1_FUNCTIONS = saved
+        saved_check = bm._check_b5
+        h5 = bm.task_hash("B5")
+        bm._check_b5 = lambda ws: {"criteria": {}, "tests": None}
+        try:
+            self.assertNotEqual(bm.task_hash("B5"), h5)
+        finally:
+            bm._check_b5 = saved_check
+        h3 = bm.task_hash("B3")
+        saved_suffix = bm.SUFFIX
+        bm.SUFFIX = saved_suffix + " Be brief."
+        try:
+            self.assertNotEqual(bm.task_hash("B3"), h3)
+        finally:
+            bm.SUFFIX = saved_suffix
+        self.assertEqual(bm.task_hash("B3"), h3)
+
+
 class Prepare(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -200,6 +230,20 @@ class Prepare(unittest.TestCase):
                                      capture_output=True, text=True).stdout
                 self.assertEqual(out.strip(), "", (flow, repo))
             self.assertFalse(os.path.exists(os.path.join(ws, ".bench", "answer.md")))
+
+    def test_run_needs_a_model(self):
+        p = subprocess.run([sys.executable, os.path.join(REPO, "scripts", "benchmark.py"), "run", self.ws["current"]],
+                           capture_output=True, timeout=60)
+        self.assertEqual(p.returncode, 2)
+        self.assertIn(b"--model", p.stderr)
+        self.assertFalse(os.path.exists(os.path.join(self.ws["current"], ".bench", "run.json")))
+
+    def test_the_test_guard_stops_run_even_with_a_model(self):
+        p = subprocess.run([sys.executable, os.path.join(REPO, "scripts", "benchmark.py"), "run", self.ws["current"],
+                            "--model", "haiku"], capture_output=True, timeout=60)
+        self.assertNotEqual(p.returncode, 0)
+        self.assertIn(b"ORCH_BENCH_NO_MODEL", p.stderr)
+        self.assertFalse(os.path.exists(os.path.join(self.ws["current"], ".bench", "run.json")))
 
     def test_run_only_builds_its_command(self):
         cmd = bm.run_command(self.ws["current"], model="haiku")
@@ -253,9 +297,11 @@ class Result(unittest.TestCase):
 
 
 def result(label, flow, tokens, passed=4, total=4, task="B3", task_hash="h3", main="m", agents=("a",),
-           coverage=(2, 2), runtime="claude-code"):
+           coverage=(2, 2), runtime="claude-code", criteria=None):
+    criteria = criteria or {"O%d" % i: "passed" if i <= passed else "failed" for i in range(1, total + 1)}
     return {"schema": 1, "label": label, "task": task, "task_hash": task_hash, "flow": flow, "runtime": runtime,
-            "models": {"main": main, "agents": list(agents)}, "criteria_passed": passed, "criteria_total": total,
+            "models": {"main": main, "agents": list(agents)}, "criteria": criteria,
+            "criteria_passed": sum(s == "passed" for s in criteria.values()), "criteria_total": total,
             "tests": {"passed": 5, "failed": 0},
             "telemetry": {"wall_ms": 60000, "agent_ms_cumulative": 90000, "delegations": 2, "retries": 0,
                           "reinvocations": 0, "coverage": list(coverage),
@@ -293,6 +339,28 @@ class Compare(unittest.TestCase):
         out = br.compare(*self.dirs(a, b))
         self.assertIn("Quality regressed in B", out)
         self.assertNotIn("fewer tokens", out)
+
+    def test_every_mandatory_criterion_counts_not_just_the_count(self):
+        swap_a = {"O1": "passed", "O2": "failed", "O3": "passed", "O4": "passed"}
+        swap_b = {"O1": "failed", "O2": "passed", "O3": "passed", "O4": "passed"}  # same count, O1 got worse
+        out = br.compare(*self.dirs([result("A", "x", n, criteria=swap_a) for n in (1000, 1100, 1200)],
+                                    [result("B", "y", n, criteria=swap_b) for n in (700, 800, 900)]))
+        self.assertIn("Quality regressed in B", out)
+        self.assertIn("O1", out.split("Quality regressed in B")[1].splitlines()[0])
+        self.assertNotIn("fewer tokens", out)
+
+    def test_a_blocked_criterion_makes_runs_not_comparable(self):
+        blocked = {"O1": "blocked", "O2": "blocked", "O3": "passed", "O4": "blocked"}
+        out = br.compare(*self.dirs([result("A", "x", 1, task="B4")] * 3,
+                                    [result("B", "y", 1, task="B4", criteria=blocked)] * 3))
+        self.assertIn("not comparable", out)
+        self.assertIn("blocked", out)
+
+    def test_an_unknown_model_is_not_comparable(self):
+        out = br.compare(*self.dirs([result("A", "x", 1, main="unavailable")] * 3,
+                                    [result("B", "y", 1, main="unavailable")] * 3))
+        self.assertIn("not comparable", out)
+        self.assertIn("main model unknown", out)
 
     def test_overlapping_ranges_show_no_difference(self):
         out = br.compare(*self.dirs([result("A", "x", n) for n in (1000, 1300, 1500)],
