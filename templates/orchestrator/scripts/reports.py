@@ -12,6 +12,8 @@ Definitions (what each figure means and what it never stands for):
 - Coverage: finished delegations with runtime_reported usage over finished delegations. A finished one without
   usage counts in coverage but adds no tokens: its tokens are "—" (not available), never 0.
 - Tokens are added up only for runtimes whose usage semantics are verified (Claude Code: input excludes cache).
+- A run is a session. One that launched no agent still counts where runs can be grouped (runtime, project, run)
+  and is reported apart where they can't (agent, model, task); agent-level filters leave it out.
 - Run wall time comes from the run's start and end. Cumulative agent time adds up agents that ran in parallel,
   so it is never wall time.
 - Efficiency and cost per task need every task of the aggregate fully covered (all its delegations finished,
@@ -81,14 +83,25 @@ def _load(db):
     return out
 
 
-def _filter(rows, f):
-    keys = {"project": "project_id", "runtime": "runtime", "model": "model", "agent": "agent_type",
-            "task": "task_id", "status": "status"}
+_AGENT_FILTERS = ("model", "agent", "task", "status")
+
+
+def _filter(rows, f, keys=None):
+    keys = keys or {"project": "project_id", "runtime": "runtime", "model": "model", "agent": "agent_type",
+                    "task": "task_id", "status": "status"}
     since, until = f.get("since"), f.get("until")
     since, until = since and _iso(since), until and _iso(until)
     return [r for r in rows
             if all(r[col] == f[k] for k, col in keys.items() if f.get(k))
             and (not since or r["started"] >= since) and (not until or r["started"] < until)]
+
+
+def _runs_without_agents(db, f):
+    """The runs that match the run-level filters and launched no agent."""
+    runs = [{"run_id": r[0], "project_id": r[1], "runtime": r[2], "started": r[3] or "", "run_ms": r[4]}
+            for r in db.execute("SELECT run_id, project_id, runtime, started_at, total_duration_ms FROM runs "
+                                "WHERE run_id NOT IN (SELECT run_id FROM agent_invocations WHERE run_id IS NOT NULL)")]
+    return _filter(runs, f, {"project": "project_id", "runtime": "runtime"})
 
 
 def _groups(rows, by):
@@ -175,15 +188,27 @@ def _cost(rows, rates):
 
 def metrics(db, f, by, rates_path):
     rows = _filter(_load(db), f)
-    if not rows:
-        return "No agent runs match these filters.\n"
     by = by or "runtime"
+    agent_filtered = any(f.get(k) for k in _AGENT_FILTERS)
+    empty_runs = [] if agent_filtered else _runs_without_agents(db, f)
+    if agent_filtered and not rows:
+        return "No agent runs match these filters.\n"
+    if not rows and not empty_runs:
+        return "No runs match these filters.\n"
     label = DIMENSIONS[by][0]
+    groupable = by in ("runtime", "project", "run")
+    extra = {}
+    for r in empty_runs if groupable else []:
+        extra.setdefault(r[DIMENSIONS[by][1]] or NA, {})[r["run_id"]] = r["run_ms"]
+    groups = dict(_groups(rows, by))
+    for key in extra:
+        groups.setdefault(key, [])
     crit, task_status = _criteria(db)
     rates, _, _ = api_cost.load_rates(rates_path)
     perf, qual, eff = [], [], []
-    for key, g in _groups(rows, by):
+    for key, g in sorted(groups.items()):
         runs = {r["run_id"]: r["run_ms"] for r in g}
+        runs.update(extra.get(key, {}))
         walls = [ms for ms in runs.values() if ms is not None]
         deleg = [r for r in g if r["deleg"]]
         fin = [r for r in deleg if r["finished"]]
@@ -208,7 +233,9 @@ def metrics(db, f, by, rates_path):
         task_rows = [r for tk in tasks for r in by_task[tk]]
         tok = _sum_tokens(task_rows)
         total = sum(tok.values()) if tok else None
-        if not complete:
+        if not tasks:
+            per_done = per_passed = cost = NA
+        elif not complete:
             per_done = per_passed = cost = "incomplete"
         else:
             done_tok = _sum_tokens([r for tk in done for r in by_task[tk]])
@@ -225,6 +252,7 @@ def metrics(db, f, by, rates_path):
            "| %s | Runs | Run wall time (median) | Delegations | Failed launches | In progress | Unfinished | "
            "Succeeded | Retries | Re-invocations | Agent time (median) | Agent time (cumulative) |" % label,
            "|---|---|---|---|---|---|---|---|---|---|---|---|"] + perf + [
+           "", _runs_note(rows, empty_runs, groupable, agent_filtered, db, f),
            "", "> Succeeded: finished without a runtime error, not that the work is right (the criteria say that). "
            "Retries follow a failed run of the same task and agent; re-invocations are any repeat. The "
            "cumulative agent time adds up agents that ran in parallel, so it is not wall time.", "",
@@ -241,6 +269,17 @@ def metrics(db, f, by, rates_path):
            "what a subscription (Claude Pro or Max, ChatGPT Plus) costs you.", ""]
     out += _overhead(db)
     return "\n".join(out) + "\n"
+
+
+def _runs_note(rows, empty_runs, groupable, agent_filtered, db, f):
+    if agent_filtered:
+        left = len(_runs_without_agents(db, f))
+        return ("Runs without agent runs are left out by the agent, model, task or status filter (%d here)." % left
+                if left else "")
+    total = len({r["run_id"] for r in rows}) + len(empty_runs)
+    if groupable or not empty_runs:
+        return "Runs: %d, of which %d had no agent runs." % (total, len(empty_runs))
+    return "Runs: %d, of which %d had no agent runs (not in the rows above)." % (total, len(empty_runs))
 
 
 def _overhead(db):

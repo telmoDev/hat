@@ -21,6 +21,9 @@ into the new version's section.
   - Coverage: finished delegations with reported usage. A finished one without usage counts in coverage, adds no
     tokens; `—` is not available, never zero. Tokens add up only for verified runtimes (Claude Code).
   - Run wall time apart from cumulative agent time (parallel agents add up, so it isn't wall time).
+  - A session that launched no agent is still a run: counted (with its wall time) by runtime, project and run;
+    reported apart by agent, model and task ("Runs: N, of which M had no agent runs"); left out, and said so,
+    by an agent, model, task or status filter.
   - Efficiency and API-equivalent cost per task only when every task of the row is fully covered; else
     "incomplete", never an average of the covered part.
   - Quality keeps tasks with and without criteria apart; criteria are not attributed to runs.
