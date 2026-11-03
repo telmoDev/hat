@@ -4,6 +4,9 @@
   python3 .orchestrator/scripts/telemetry.py hook claude < payload    (a Claude Code hook's input)
   python3 .orchestrator/scripts/telemetry.py sync-criteria             (the ODD task files' criteria and tasks)
   python3 .orchestrator/scripts/telemetry.py cost                      (API-equivalent estimate, Markdown)
+  python3 .orchestrator/scripts/telemetry.py usage|metrics [--by agent|model|runtime|project|task|run] [filters]
+  python3 .orchestrator/scripts/telemetry.py report [<run id>|last]
+    filters: --project --runtime --model --agent --task --status --since --until (date or ISO, UTC)
 Hooks call it through .orchestrator/hooks/telemetry.sh, which never fails the session and prints nothing.
 The store is .orchestrator/telemetry/telemetry.db (ORCH_TELEMETRY_DB overrides it), errors go to errors.log next
 to it, and each call logs its own duration in ingest_log, so the instrumentation's overhead is measured too.
@@ -523,21 +526,47 @@ def ingest(command, work, path):
             store.close()
 
 
-def main(argv):
-    if argv[1:2] == ["cost"]:  # a report: prints, unlike the hook commands
-        import api_cost  # next to this file
-        here = os.path.dirname(os.path.abspath(__file__))
-        rates = os.environ.get("ORCH_RATES") or os.path.join(os.path.dirname(here), "rates.json")
-        path = db_path()
-        if not os.path.exists(path):
-            print("No telemetry recorded yet (%s)." % path)
-            return 0
-        store = Store(path)
-        try:
-            sys.stdout.write(api_cost.report(store.db, rates))
-        finally:
-            store.close()
+def _print_report(argv):
+    """cost, usage, metrics, report: read the store and print Markdown, unlike the hook commands."""
+    import argparse
+    import api_cost  # next to this file
+    import reports
+    p = argparse.ArgumentParser(prog="telemetry.py " + argv[1])
+    if argv[1] in ("usage", "metrics"):
+        p.add_argument("--by", choices=sorted(reports.DIMENSIONS))
+        for k in ("project", "runtime", "model", "agent", "task", "status", "since", "until"):
+            p.add_argument("--" + k)
+    elif argv[1] == "report":
+        p.add_argument("run", nargs="?", default="last")
+    args = p.parse_args(argv[2:])
+    here = os.path.dirname(os.path.abspath(__file__))
+    rates = os.environ.get("ORCH_RATES") or os.path.join(os.path.dirname(here), "rates.json")
+    path = db_path()
+    if not os.path.exists(path):
+        print("No telemetry recorded yet (%s)." % path)
         return 0
+    store = Store(path)
+    try:
+        if argv[1] == "cost":
+            text = api_cost.report(store.db, rates)
+        elif argv[1] == "report":
+            text = reports.report(store.db, args.run, rates)
+            if text is None:
+                print("No run %s." % args.run)
+                return 1
+        else:
+            f = {k: v for k, v in vars(args).items() if k != "by" and v}
+            text = (reports.usage(store.db, f, args.by) if argv[1] == "usage"
+                    else reports.metrics(store.db, f, args.by, rates))
+        sys.stdout.write(text)
+    finally:
+        store.close()
+    return 0
+
+
+def main(argv):
+    if argv[1:2] and argv[1] in ("cost", "usage", "metrics", "report"):
+        return _print_report(argv)
     if argv[1:2] not in (["ingest"], ["sync-criteria"]) and argv[1:3] != ["hook", "claude"]:
         print(__doc__.strip(), file=sys.stderr)
         return 2
