@@ -114,7 +114,8 @@ into the new version's section.
   it prints the Workspaces steps to apply. Everything is checked and planned before the first write; a failure
   midway lists what was done and what is pending, with the version unchanged. Refuses a missing or untagged
   `TEMPLATE_VERSION`, uncommitted changes in the layer, a pre-0.1.0 workspace and a skill that is not a release
-  (`--dev` updates without claiming a version). `--dry-run` shows the plan. Never deletes, never commits.
+  (`--dev` updates without claiming a version, for testing the skill only: at the next release, a file it wrote
+  that changed again comes as `.new`). `--dry-run` shows the plan. Never deletes, never commits.
 - The telemetry store refuses a schema newer than its script knows: it is left as is, never migrated down, and
   the error says to update the orchestrator.
 - `INSTALL.md` and `USAGE.md`: the telemetry's install, settings, privacy, recovery and compatibility.

@@ -11,7 +11,9 @@ Conservative and idempotent; it never deletes and never commits:
   - text the user adapts (AGENTS.md, CLAUDE.md, odd/README.md, memory/, task files) is never edited: the
     CHANGELOG's Workspaces steps since the workspace's version are printed for the agent or the user to apply.
 Everything is checked and planned before the first write. A failure midway lists what was done and what is
-pending. --dev updates from a skill that is not a release, leaving TEMPLATE_VERSION as it was.
+pending. --dev updates from a skill that is not a release, leaving TEMPLATE_VERSION as it was: it is for testing
+the skill, not for workspaces in regular use. At the next release, a file it wrote that changed again before the
+release matches neither version and comes as <file>.new (one the snapshot didn't change updates as usual).
 ORCH_UPDATE_FAIL_AT=<path> makes the step writing that path fail (tests only).
 """
 import json
@@ -294,7 +296,9 @@ def main(argv):
         return 1
     print("No changes: the workspace already matches this skill." if not ops else
           "\nUpdated to v%s." % v["target"] if v["released"] else
-          "\nUpdated. TEMPLATE_VERSION left at %s: this skill is not a release." % v["src"])
+          "\nUpdated. TEMPLATE_VERSION left at %s: this skill is not a release. --dev is for testing the skill, "
+          "not for workspaces in regular use: at the next release, a file this run wrote that changed again "
+          "comes as <file>.new." % v["src"])
     if pending_new or steps:
         print("\nNeeds your attention:")
         for p in pending_new:
