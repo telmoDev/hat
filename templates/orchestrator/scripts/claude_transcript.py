@@ -4,13 +4,15 @@ agent_transcript_path). Called by telemetry.py; reads nothing but the usage figu
 Why a transcript: no documented hook gives a subagent's usage. The Agent tool result reports only the last
 request, and a background agent's result reports none (code.claude.com/docs/en/hooks). The transcript's
 format is private, so this reader is strict: any line or usage it doesn't recognize makes the whole agent
-`unavailable` instead of a partial sum. Each request appears on several lines with the same usage, so it
-counts each message id once. Shape checked against Claude Code 2.1.308; when a release changes it, bump
-PARSER_VERSION with the fix.
+`unavailable` instead of a partial sum. A request appears on several lines: the same model, input and cache
+figures, and output_tokens that grows while it streams. It counts once, with its largest output. Any other
+difference between two lines of one request is inconsistent and gives `unavailable` too, never a silent pick.
+Shape checked against Claude Code 2.1.308 (8,287 repeated lines in 489 transcripts: all identical but for a
+growing output); when a release changes it, bump PARSER_VERSION with the fix.
 """
 import json
 
-PARSER_VERSION = "claude-transcript/1"
+PARSER_VERSION = "claude-transcript/2"
 _FIELDS = {"input_tokens": "input_tokens", "output_tokens": "output_tokens",
            "cache_read_input_tokens": "cache_read_tokens", "cache_creation_input_tokens": "cache_write_tokens"}
 
@@ -42,6 +44,11 @@ def usage(path):
             if not mid or not isinstance(u, dict) or not all(
                     isinstance(u.get(k), int) and not isinstance(u.get(k), bool) and u[k] >= 0 for k in _FIELDS):
                 return None, "unrecognized usage on line %d" % n
+            seen = per_request.get(mid)
+            if seen is not None:
+                same = seen[0] == msg["model"] and all(seen[1][k] == u[k] for k in _FIELDS if k != "output_tokens")
+                if not same or u["output_tokens"] < seen[1]["output_tokens"]:
+                    return None, "inconsistent usage for a request on line %d" % n
             per_request[mid] = (msg["model"], u)
     if not per_request:
         return None, "no requests in transcript"

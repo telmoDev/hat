@@ -26,11 +26,25 @@ into the new version's section.
 
 - Local operational telemetry, part 2 (Claude Code): the hooks in `.claude/settings.json` record each session
   (a run), each subagent (start, stop, model, the task from its brief's `Task:` header, attempts at the same
-  task) and its tokens, without model calls. Async, except SessionEnd.
+  task) and its tokens, without model calls.
+  - The hooks are synchronous with a 5 s timeout, except SessionStart: `claude -p` kills async hooks still
+    running at teardown, which would lose the last SubagentStop. A call takes ~30 ms (one bash and one Python
+    start, a SQLite write; SubagentStop also reads the transcript: 64 ms on a 14.6 MB one), printing
+    nothing; 5 s covers a locked database (2 s busy timeout) without holding a session's exit for long.
+  - Claude Code's own agents (prompt suggestions, `/btw`) are not recorded: SubagentStop fires for them with an
+    empty `agent_type`, which an Agent-tool subagent never has (checked on 489 real subagents). Limitation: in a
+    session started with `--agent`, they carry that agent's name and can't be told apart.
+  - A failed Agent call (it never started a subagent; cancelling a running one doesn't fire the hook) is its own
+    invocation, `claude:tool:<tool_use_id>`, with only `error: interrupt|error` and the reported duration, never
+    the error text; it never counts as an attempt at its task.
+  - Briefs name their task on the first line (`Task: odd/tasks/<feature>.md › T<n> …` or `Task: <feature>-<n> ·`);
+    words after `T<n>` (`T2 review`) are allowed. Only that line is read; the prompt is never stored.
   - Tokens come from the subagent's transcript when it stops (`claude_transcript.py`): no documented hook gives
     them, since the Agent result's usage covers only its last request and a background agent's result none. The
-    format is private, so the reader is strict and versioned (`claude-transcript/1`): anything it doesn't
-    recognize records `unavailable`, never a partial sum. Each request spans several lines; it counts each once.
+    format is private, so the reader is strict and versioned (`claude-transcript/2`): anything it doesn't
+    recognize records `unavailable`, never a partial sum. Each request spans several lines with the same figures
+    but an output that grows while it streams; it counts once, with its final output. Lines of one request that
+    differ in anything else give `unavailable`.
     `TELEMETRY_TRANSCRIPTS="off"` records `unavailable` instead.
   - A subagent that stops is `completed`, not `success`: the criteria say whether its work holds.
   - `AGENTS.md` › *Tool mapping*: the run log no longer copies the Agent result's tokens (last request only).

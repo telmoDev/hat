@@ -265,6 +265,57 @@ class Projection(unittest.TestCase):
         self.assertEqual(self.s.db.execute("SELECT count(*), sum(input_tokens) FROM usage_records").fetchone(), (1, 25))
 
 
+class Lifecycle(unittest.TestCase):
+    """Whole hook sequences through the adapter into the store: one invocation per agent, no false retries."""
+
+    def setUp(self):
+        self.dir = tempfile.mkdtemp()
+        self.s = t.Store(os.path.join(self.dir, "t.db"))
+        self.tp = os.path.join(self.dir, "agent-a1.jsonl")
+        with open(self.tp, "w") as f:
+            f.write(json.dumps(line("m1")) + "\n")
+
+    def tearDown(self):
+        self.s.close()
+        shutil.rmtree(self.dir, ignore_errors=True)
+
+    def feed(self, *payloads):
+        for p in payloads:
+            for e in t.claude_events(p, {}, "ws"):
+                self.s.record(e)
+        return self.s.db.execute("SELECT invocation_id, task_id, status, retry_number FROM agent_invocations "
+                                 "ORDER BY invocation_id").fetchall()
+
+    def agent(self, status, aid="a1"):
+        start = payload("SubagentStart", agent_id=aid, agent_type="api-dev")
+        stop = payload("SubagentStop", agent_id=aid, agent_type="api-dev", agent_transcript_path=self.tp)
+        result = payload("PostToolUse", tool_name="Agent", tool_use_id="toolu_" + aid,
+                         tool_input={"subagent_type": "api-dev", "prompt": "Task: odd/tasks/login.md › T2 · Tier: n"},
+                         tool_response={"status": status, "agentId": aid, "totalDurationMs": 5})
+        return start, stop, result
+
+    def test_background_and_foreground_in_any_order(self):
+        for status, order in (("async_launched", (0, 2, 1)), ("async_launched", (2, 0, 1)), ("completed", (0, 1, 2)),
+                              ("completed", (2, 1, 0))):
+            with self.subTest(status=status, order=order):
+                self.s.db.execute("DELETE FROM agent_invocations")
+                self.s.db.execute("DELETE FROM events")
+                ev = self.agent(status)
+                rows = self.feed(*(ev[i] for i in order))
+                self.assertEqual(rows, [("claude:a1", "login#T2", "completed", 0)])
+                self.assertEqual(self.s.db.execute("SELECT count(*) FROM usage_records WHERE source = "
+                                                   "'runtime_reported'").fetchone()[0], 1)
+
+    def test_a_failed_launch_then_the_real_one_and_an_internal_agent(self):
+        failed = payload("PostToolUseFailure", tool_name="Agent", tool_use_id="toolu_0",
+                         tool_input={"subagent_type": "api-dev", "prompt": "Task: odd/tasks/login.md › T2 · Tier: n"},
+                         error="denied", is_interrupt=False)
+        internal = payload("SubagentStop", agent_id="int1", agent_type="", agent_transcript_path=self.tp)
+        rows = self.feed(failed, internal, *self.agent("async_launched"))
+        self.assertEqual(rows, [("claude:a1", "login#T2", "completed", 0),
+                                ("claude:tool:toolu_0", "login#T2", "failed", 0)])
+
+
 class HookConfig(unittest.TestCase):
     """claude -p kills async hooks still running at teardown (hooks reference, "async hooks"), so every telemetry hook
     whose event can come last is synchronous, with a timeout short enough not to hold the session's exit."""

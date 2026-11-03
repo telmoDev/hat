@@ -20,7 +20,7 @@
           {
             "type": "command",
             "command": "bash \"${CLAUDE_PROJECT_DIR:-$PWD}/.orchestrator/hooks/telemetry.sh\" hook claude",
-            "timeout": 10,
+            "timeout": 5,
             "shell": "bash",
             "async": true
           }
@@ -33,7 +33,7 @@
           {
             "type": "command",
             "command": "bash \"${CLAUDE_PROJECT_DIR:-$PWD}/.orchestrator/hooks/telemetry.sh\" hook claude",
-            "timeout": 10,
+            "timeout": 5,
             "shell": "bash"
           }
         ]
@@ -45,9 +45,8 @@
           {
             "type": "command",
             "command": "bash \"${CLAUDE_PROJECT_DIR:-$PWD}/.orchestrator/hooks/telemetry.sh\" hook claude",
-            "timeout": 10,
-            "shell": "bash",
-            "async": true
+            "timeout": 5,
+            "shell": "bash"
           }
         ]
       }
@@ -58,9 +57,8 @@
           {
             "type": "command",
             "command": "bash \"${CLAUDE_PROJECT_DIR:-$PWD}/.orchestrator/hooks/telemetry.sh\" hook claude",
-            "timeout": 10,
-            "shell": "bash",
-            "async": true
+            "timeout": 5,
+            "shell": "bash"
           }
         ]
       }
@@ -72,9 +70,8 @@
           {
             "type": "command",
             "command": "bash \"${CLAUDE_PROJECT_DIR:-$PWD}/.orchestrator/hooks/telemetry.sh\" hook claude",
-            "timeout": 10,
-            "shell": "bash",
-            "async": true
+            "timeout": 5,
+            "shell": "bash"
           }
         ]
       }
@@ -86,9 +83,8 @@
           {
             "type": "command",
             "command": "bash \"${CLAUDE_PROJECT_DIR:-$PWD}/.orchestrator/hooks/telemetry.sh\" hook claude",
-            "timeout": 10,
-            "shell": "bash",
-            "async": true
+            "timeout": 5,
+            "shell": "bash"
           }
         ]
       }

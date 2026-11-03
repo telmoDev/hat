@@ -93,7 +93,7 @@ With no repo arguments it uses the detected ones. It creates:
 | `.agents/skills/` | both | `sync-memory`, the default standards `software-principles` and `design-patterns`, and `pre-pr-review` (Codex's version of the workflow). The one copy to edit |
 | `.gitattributes` | both | Keeps scripts LF, so Git for Windows doesn't break them with CRLF |
 | `CLAUDE.md` | Claude | Imports `AGENTS.md` and the two memory files |
-| `.claude/settings.json` | Claude | The SessionStart decision index and update notice, the telemetry hooks (session start and end, subagent start and stop, Agent results; async except SessionEnd), `autoCompactWindow: 150000`, idle compaction from 100k (`env.CLAUDE_CODE_IDLE_COMPACT_MIN_TOKENS`), `skillListingMaxDescChars: 300`, `enabledPlugins` |
+| `.claude/settings.json` | Claude | The SessionStart decision index and update notice, the telemetry hooks (session start and end, subagent start and stop, Agent results; synchronous with a 5 s timeout, except SessionStart), `autoCompactWindow: 150000`, idle compaction from 100k (`env.CLAUDE_CODE_IDLE_COMPACT_MIN_TOKENS`), `skillListingMaxDescChars: 300`, `enabledPlugins` |
 | `.claude/agents/` | Claude | `explorer` (Haiku), `architect` (Opus), `<repo-slug>-dev` (Sonnet, compacts at 150k): the source the Codex agents are rendered from |
 | `.claude/workflows/pre-pr-review.js` | Claude | Saved workflow: `architect` reviewers per group of checklist items, then a Sonnet `architect` that tries to refute each finding |
 | `.claude/skills/` | Claude | Copies of `.agents/skills/` except `CODEX_ONLY_SKILLS` |

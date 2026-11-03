@@ -278,11 +278,14 @@ class Store:
 # Claude Code hooks -> contract events. Payload shapes: code.claude.com/docs/en/hooks, checked on 2.1.308.
 # Only ids, names, statuses and figures are taken: never a prompt, a response or tool input beyond the brief's
 # first-line "Task: ... · Tier: ..." header, which names the task.
-_TASK_HEADER = re.compile(r"Task:\s*(\S+?)(?:\.md\s*›\s*(T\d+))?\s*·")
+# Header forms (AGENTS.md › briefs): "Task: <feature>-<n> · Tier: …" and "Task: odd/tasks/<feature>.md › T<n> · Tier: …",
+# where real briefs may add words after T<n> ("T2 review", "T1 (review round 1)").
+_TASK_HEADER = re.compile(r"Task:[ \t]*(\S+?)(?:\.md)?(?:[ \t]*›[ \t]*(T\d+)\b[^·]*)?[ \t]*·")
 
 
 def _task_of(prompt):
-    m = _TASK_HEADER.match(prompt.lstrip()) if isinstance(prompt, str) else None
+    """The task the brief's first line names: <feature>#T<n>, <feature> or <feature>-<n>; None without a header."""
+    m = _TASK_HEADER.match(prompt.lstrip().split("\n", 1)[0]) if isinstance(prompt, str) else None
     if not m:
         return None
     return (os.path.basename(m.group(1)) + ("#" + m.group(2) if m.group(2) else ""))[:MAX_STR]
@@ -316,6 +319,9 @@ def claude_events(p, env, project):
         aid = agent_id(p.get("agent_id"))
         if not isinstance(aid, str) or not aid:
             return []
+        if p.get("agent_type") == "":
+            # Claude Code's own agents (prompt suggestions, /btw): an Agent-tool subagent always has its type.
+            return []
         inv, base = "claude:" + aid, {"agent_id": aid, "agent_type": _short(p.get("agent_type")), "runtime": rt}
         if kind == "SubagentStart":
             return [make_event("agent.started", run, invocation_id=inv, payload=_clean(base), key="start")]
@@ -338,9 +344,17 @@ def claude_events(p, env, project):
         ti = p.get("tool_input") if isinstance(p.get("tool_input"), dict) else {}
         task, atype = _task_of(ti.get("prompt")), _short(ti.get("subagent_type"))
         if kind == "PostToolUseFailure":
+            # The Agent call failed before a subagent existed (cancelling a running one doesn't fire this hook), so
+            # it has no agent_id: its own id, and only the category and duration, never the error text.
             tid = p.get("tool_use_id")
-            return [make_event("agent.failed", run, task_id=task, invocation_id="claude:" + tid,
-                               payload=_clean({"agent_type": atype, "runtime": rt, "status": "failed"}))] if tid else []
+            if not isinstance(tid, str) or not tid:
+                return []
+            dur = p.get("duration_ms")
+            ok_dur = isinstance(dur, int) and not isinstance(dur, bool) and dur >= 0
+            return [make_event("agent.failed", run, task_id=task, invocation_id="claude:tool:" + tid, payload=_clean({
+                "agent_type": atype, "runtime": rt, "status": "failed",
+                "error": "interrupt" if p.get("is_interrupt") is True else "error",
+                "duration_ms": dur if ok_dur else None, "duration_source": "runtime_reported" if ok_dur else None}))]
         r = p.get("tool_response") if isinstance(p.get("tool_response"), dict) else {}
         aid = agent_id(r.get("agentId"))
         if not isinstance(aid, str) or not aid:
