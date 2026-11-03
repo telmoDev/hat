@@ -283,7 +283,7 @@ class Lifecycle(unittest.TestCase):
         for p in payloads:
             t.claude_hook(self.s, p, {}, "ws")
         return self.s.db.execute("SELECT invocation_id, task_id, status, retry_number FROM agent_invocations "
-                                 "ORDER BY invocation_id").fetchall()
+                                 "WHERE invocation_id NOT LIKE '%:main' ORDER BY invocation_id").fetchall()
 
     def agent(self, status, aid="a1"):
         start = payload("SubagentStart", agent_id=aid, agent_type="api-dev")
@@ -528,7 +528,8 @@ class Hook(unittest.TestCase):
         with sqlite3.connect(os.path.join(o, "telemetry", "telemetry.db")) as db:
             self.assertEqual(db.execute("SELECT orchestrator_version, project_id FROM runs").fetchone(),
                              ("0.8.0", os.path.basename(root)))
-            self.assertEqual(db.execute("SELECT count(*) FROM agent_invocations").fetchone()[0], 1)
+            self.assertEqual(db.execute("SELECT count(*) FROM agent_invocations WHERE agent_id IS NOT NULL")
+                             .fetchone()[0], 1)  # the delegation; the session's main invocation is apart
 
 
 if __name__ == "__main__":
