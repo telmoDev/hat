@@ -38,7 +38,7 @@ class Contract(unittest.TestCase):
         cases = {
             "unknown type": dict(ev("run.started", runtime="claude-code"), event_type="run.paused"),
             "no run": dict(ev("run.started", runtime="claude-code"), run_id=""),
-            "naive timestamp": ev("run.started", ts="2026-11-03T15:30:00", runtime="claude-code"),
+            "naive timestamp": dict(ev("run.started", runtime="claude-code"), timestamp="2026-11-03T15:30:00"),
             "payload key outside the contract (privacy)": ev("agent.completed", inv="claude:a1", prompt="secret"),
             "agent event without invocation": ev("agent.started", agent_type="api-dev"),
             "tokens with source unavailable": ev("usage.reported", inv="claude:a1", source="unavailable", input_tokens=5),
