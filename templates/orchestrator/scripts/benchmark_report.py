@@ -1,9 +1,11 @@
 """Compare two sets of benchmark results (the JSON files `scripts/benchmark.py result` writes), as Markdown.
 Read-only, no model calls. Called by `telemetry.py benchmark <dirA> <dirB>`.
 
-Runs are compared only for the same task (same task hash: request, checks and fixture), runtime and models.
+Runs are compared only for the same task (same task hash: request, criteria, checks, fixture, grading code and
+session settings), runtime and named models; a run without a named model, or with a blocked criterion, isn't.
 Quality and consumption are shown apart, each as n, median and range. A quality regression is never read as an
-efficiency gain; overlapping ranges show no difference; tokens with incomplete coverage aren't compared; fewer
+efficiency gain (each mandatory criterion's pass rate is compared, not only their count); overlapping ranges show no
+difference; tokens with incomplete coverage aren't compared; fewer
 than 3 runs on a side is flagged. Wall time and cumulative agent time are different measures.
 """
 import json
@@ -47,13 +49,24 @@ def _tokens(runs):
     return None if not runs or None in totals else totals
 
 
+def _rate(runs, code):
+    """How often a criterion passed over the runs."""
+    return sum((r.get("criteria") or {}).get(code) == "passed" for r in runs) / float(len(runs))
+
+
 def _comparable(a, b):
     runs = a + b
     for key, label in (("task_hash", "task hash"), ("runtime", "runtime")):
         if len({r.get(key) for r in runs}) > 1:
             return label + " differs"
-    if len({(r.get("models") or {}).get("main") for r in runs}) > 1:
+    mains = {(r.get("models") or {}).get("main") for r in runs}
+    if mains & {None, "", "unavailable", "default"}:
+        return "main model unknown in some runs: a run without a named model is never compared"
+    if len(mains) > 1:
         return "main model differs"
+    blocked = sorted({c for r in runs for c, s in (r.get("criteria") or {}).items() if s == "blocked"})
+    if blocked:
+        return "criteria blocked (%s): the check couldn't run" % ", ".join(blocked)
     if len({tuple((r.get("models") or {}).get("agents") or []) for r in runs}) > 1:
         return "agent models differ"
     return None
@@ -97,11 +110,15 @@ def compare(dir_a, dir_b):
             reading.append("- %s: fewer than 3 runs on a side (%d vs %d): differences may be noise."
                            % (task, len(a), len(b)))
         ma, mb = statistics.median(qa), statistics.median(qb)
+        worse = [c for c in sorted({c for r in a + b for c in (r.get("criteria") or {})})
+                 if _rate(b, c) < _rate(a, c)]
         worse_tests = fa and fb and statistics.median(fb) > statistics.median(fa)
-        if mb < ma or worse_tests:
-            reading.append("- %s: Quality regressed in B (criteria passed median %s vs %s of %d%s): consumption "
-                           "differences are not an improvement." % (
-                               task, _fmt_n(mb), _fmt_n(ma), total, ", more failing tests" if worse_tests else ""))
+        if worse or mb < ma or worse_tests:
+            what = (["criteria passed less often: " + ", ".join(worse)] if worse else []) + (
+                ["more failing tests"] if worse_tests else []) or ["criteria passed median %s vs %s" % (
+                    _fmt_n(mb), _fmt_n(ma))]
+            reading.append("- %s: Quality regressed in B (%s): consumption differences are not an improvement."
+                           % (task, "; ".join(what)))
             continue
         if mb > ma:
             reading.append("- %s: Quality improved in B (criteria passed median %s vs %s of %d)."

@@ -25,15 +25,15 @@ pilot before deciding how many runs to make.
 
 ```bash
 python3 scripts/benchmark.py prepare B1 v0.7.0 /tmp/b1-old    # or: current
-python3 scripts/benchmark.py run /tmp/b1-old --model <model>   # the only step that uses a model
+python3 scripts/benchmark.py run /tmp/b1-old --model <model>   # the only step that uses a model; --model required
 python3 scripts/benchmark.py result /tmp/b1-old --label pilot-v0.7.0
 ```
 
 `prepare` copies the fixture, scaffolds the flow (`current` from this checkout, `v0.7.0` from its tag) and installs
 the same measurement layer in both: the current telemetry scripts and hooks. Only the flow under test differs.
 `run` gives the session the task's request on stdin (`claude -p`, edits accepted, only python, node and git allowed;
-no push), and saves its final answer to `.bench/answer.md`. A session can also be run by hand in the workspace; for
-B1, save the answer there. `result` runs the checks on a copy of the workspace, reads its telemetry and writes the
+no push), and saves its final answer to `.bench/answer.md`. A session can also be run by hand in the workspace (for
+B1, save the answer there), but it has no named model, so its result is never compared. `result` runs the checks on a copy of the workspace, reads its telemetry and writes the
 result JSON. Files consulted are recorded as `unavailable`: no hook reports them.
 
 ## Comparing
@@ -42,7 +42,8 @@ result JSON. Files consulted are recorded as `unavailable`: no hook reports them
 python3 templates/orchestrator/scripts/telemetry.py benchmark benchmark/results/<A> benchmark/results/<B>
 ```
 
-Runs are compared only with the same task hash (request, checks and fixture), runtime and models; anything else is
-"not comparable". Quality and consumption are shown apart, each as n, median and range; a quality regression is
-never read as an efficiency gain, overlapping ranges show no difference, tokens with incomplete coverage aren't
+Runs are compared only with the same task hash (request and criteria, hidden checks, fixture, the harness code that
+grades the task, and the session's settings), runtime and named models; a run without a named model or with a
+`blocked` criterion (B4 without Node) isn't either. Anything else is "not comparable". Quality and consumption are shown apart, each as n, median and range; a quality regression (any mandatory
+criterion passing less often, or more failing tests) is never read as an efficiency gain, overlapping ranges show no difference, tokens with incomplete coverage aren't
 compared, and fewer than 3 runs on a side is flagged. Wall time and cumulative agent time are kept apart.

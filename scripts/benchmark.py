@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """The benchmark harness: fixed tasks on a fixed fixture, run on demand, checked without any model.
   python3 scripts/benchmark.py prepare <B1..B5> <current|v0.7.0> <dir>   a fresh workspace for one task and flow
-  python3 scripts/benchmark.py run <dir> [--model <m>]                   the one step that calls a model: a
+  python3 scripts/benchmark.py run <dir> --model <m>                     the one step that calls a model: a
                                                                          `claude -p` session with the task's request
   python3 scripts/benchmark.py check <dir>                               the task's criteria, as JSON
   python3 scripts/benchmark.py result <dir> --label <l> [--out <dir>]    criteria + telemetry -> one result JSON
@@ -14,6 +14,7 @@ Files consulted are recorded as unavailable: no hook reports them.
 """
 import datetime
 import hashlib
+import inspect
 import io
 import json
 import os
@@ -62,14 +63,26 @@ def _read_bytes(path):
         return f.read().replace(b"\r\n", b"\n")
 
 
+# The code that decides each task's criteria; part of its hash, with the session's settings.
+CHECK_CODE = {"B1": ("_check_b1", "_fixture_totals"), "B2": ("_hidden_py", "_unittest", "_by_criterion", "_py_key"),
+              "B3": ("_hidden_py", "_unittest", "_by_criterion", "_py_key"),
+              "B4": ("_check_b4", "_node_tests", "_by_criterion", "_js_key"), "B5": ("_check_b5", "_probe", "_unittest")}
+
+
 def task_hash(task, base=BENCH):
-    """What makes two runs of a task the same task: its file, its checks and the fixture."""
+    """What makes two runs of a task the same task: its file (request and criteria), its hidden checks, the
+    fixture, the harness code that grades it, and the session's settings (the request's suffix, the command)."""
     h = hashlib.sha256()
     parts = ["tasks/%s.md" % task] + ["checks/" + n for n in sorted(os.listdir(os.path.join(base, "checks")))
                                       if n.startswith(task.lower() + "_")]
     parts += ["fixture/" + f for f in _files(os.path.join(base, "fixture"))]
     for rel in parts:
         h.update(rel.encode() + b"\0" + _read_bytes(os.path.join(base, rel)) + b"\0")
+    me = sys.modules[__name__]
+    for name in CHECK_CODE[task]:
+        h.update(name.encode() + b"\0" + inspect.getsource(getattr(me, name)).replace("\r\n", "\n").encode() + b"\0")
+    h.update(repr(sorted(B1_FUNCTIONS) if task == "B1" else []).encode())
+    h.update(SUFFIX.encode() + repr(run_command(None, "<model>")).encode())
     return h.hexdigest()[:16]
 
 
@@ -162,13 +175,18 @@ def run_command(ws, model=None):
     return cmd + (["--model", model] if model else [])
 
 
-def run(ws, model=None):
+def run(ws, model):
+    """The one model step. The model is required: a run is compared only with runs of the same, named model."""
+    if os.environ.get("ORCH_BENCH_NO_MODEL"):
+        raise SystemExit("benchmark: run refused: ORCH_BENCH_NO_MODEL is set (tests never start a model session)")
+    if not model:
+        raise SystemExit("benchmark: run needs --model <model>")
     with open(os.path.join(ws, ".bench", "task.json")) as f:
         meta = json.load(f)
     cmd = run_command(ws, model)
     version = _run([cmd[0], "--version"]).stdout.strip() or "unavailable"
     with open(os.path.join(ws, ".bench", "run.json"), "w") as f:
-        json.dump({"main_model": model or "default", "claude_code_version": version}, f, indent=2)
+        json.dump({"main_model": model, "claude_code_version": version}, f, indent=2)
     p = subprocess.run(cmd, cwd=ws, input=request(meta["task"]) + SUFFIX, capture_output=True, encoding="utf-8",
                        errors="replace", timeout=3600)
     with open(os.path.join(ws, ".bench", "answer.md"), "w", encoding="utf-8") as f:
@@ -429,9 +447,16 @@ def main(argv):
     if args[:1] == ["prepare"] and len(args) == 4:
         print(json.dumps(prepare(args[1], args[2], os.path.abspath(args[3])), indent=2))
         return 0
-    if args[:1] == ["run"] and len(args) in (2, 4):
-        model = args[3] if len(args) == 4 and args[2] == "--model" else None
-        return run(os.path.abspath(args[1]), model)
+    if args[:1] == ["run"]:
+        if len(args) != 4 or args[2] != "--model":
+            print("benchmark: run needs --model <model>: runs compare only with the same, named model",
+                  file=sys.stderr)
+            return 2
+        try:
+            return run(os.path.abspath(args[1]), args[3])
+        except SystemExit as err:
+            print(err, file=sys.stderr)
+            return 3
     if args[:1] == ["check"] and len(args) == 2:
         with open(os.path.join(args[1], ".bench", "task.json")) as f:
             task = json.load(f)["task"]
