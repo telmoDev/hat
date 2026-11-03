@@ -19,13 +19,15 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Time the runner's basics (diagnosis)
+      - name: Fast local name lookups (macOS runner)
+        if: runner.os == 'macOS'
         shell: bash
         run: |
-          python -c "import socket,time; t=time.time(); socket.getfqdn('127.0.0.1'); print('getfqdn %.2f s' % (time.time()-t))"
-          python -c "import time,http.server; t=time.time(); s=http.server.HTTPServer(('127.0.0.1',0), http.server.BaseHTTPRequestHandler); print('HTTPServer bind %.2f s' % (time.time()-t)); s.server_close()"
-          d=$(mktemp -d); s=$(date +%s); (cd $d && git init -q && echo x > f && git add f && git -c user.name=t -c user.email=t@e commit -qm x); echo "git init+commit $(( $(date +%s) - s )) s"
-          s=$(date +%s); mkdir -p $d/ws/api && (cd $d/ws/api && git init -q && echo x > f && git add f && git -c user.name=t -c user.email=t@e commit -qm x) && bash scripts/scaffold.sh --git $d/ws >/dev/null; echo "scaffold $(( $(date +%s) - s )) s"
+          # On the macOS runner a reverse lookup of 127.0.0.1 takes ~35 s (measured), and http.server's HTTPServer
+          # does one per start: the benchmark fixture's server took the job from ~40 s to ~11 min. Name the runner
+          # locally, then check it: fail here, fast, if a lookup is still slow.
+          echo "127.0.0.1 localhost $(hostname) $(hostname -s)" | sudo tee -a /etc/hosts >/dev/null
+          python -c "import socket, sys, time; t = time.time(); socket.getfqdn('127.0.0.1'); d = time.time() - t; print('getfqdn %.2f s' % d); sys.exit(d > 2)"
       - name: Scaffold a workspace and run the gate
         shell: bash
         run: bash tests/smoke.sh
