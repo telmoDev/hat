@@ -71,7 +71,7 @@ class Store(unittest.TestCase):
     def test_migrations_are_versioned_and_idempotent(self):
         self.s.close()
         self.s = t.Store(self.path)
-        self.assertEqual([r[0] for r in self.s.db.execute("SELECT version FROM schema_migrations")], [1])
+        self.assertEqual([r[0] for r in self.s.db.execute("SELECT version FROM schema_migrations")], [1, 2])
 
     def test_each_session_is_its_own_run(self):  # F1-01
         self.s.record(ev("run.started", run="claude:s1", runtime="claude-code", project_id="ws"))
