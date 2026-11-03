@@ -11,6 +11,29 @@ into the new version's section.
 
 ## Unreleased
 
+- Telemetry reports (`reports.py`, read-only, no model calls): `telemetry.py usage | metrics | report`, Markdown,
+  by agent, model, runtime, project, task or run, with filters (`--project --runtime --model --agent --task
+  --status --since --until`). Skill `orchestrator-metrics` says which command answers which question; run with
+  `!`, a report costs no tokens.
+  - Delegations exclude failed launches. Succeeded is n/m over finished delegations (finished without a runtime
+    error, not that the work is right); 0/0 is "no data". Running agent runs are in progress or unfinished and
+    count as neither. Retries follow a failed run of the same task and agent; re-invocations are any repeat.
+  - Coverage: finished delegations with reported usage. A finished one without usage counts in coverage, adds no
+    tokens; `—` is not available, never zero. Tokens add up only for verified runtimes (Claude Code).
+  - Run wall time apart from cumulative agent time (parallel agents add up, so it isn't wall time).
+  - Efficiency and API-equivalent cost per task only when every task of the row is fully covered; else
+    "incomplete", never an average of the covered part.
+  - Quality keeps tasks with and without criteria apart; criteria are not attributed to runs.
+  - The instrumentation's own overhead, from `ingest_log`.
+- `AGENTS.md` › *Run log*: tokens and duration come from `telemetry.py report`; the run log (and a small task's
+  `PROGRESS.md` line, now `Attempts:` instead of `Cost:`) keeps agent, tier, attempt, result, first relevant
+  error and where to pick up. With Codex, not recorded yet, it still notes the thread's tokens.
+
+  **Workspaces**: copy `reports.py` and `telemetry.py` into `.orchestrator/scripts/` and the skill into
+  `.agents/skills/orchestrator-metrics/` (then `bash .orchestrator/scripts/sync-skills.sh`). In `AGENTS.md`,
+  replace the *Run log* bullet and the *Tool mapping* run-log row with the template's; in `odd/README.md`, the
+  figures rule and the *Run log* line; in `memory/PROGRESS.md`, the `Cost:` line with `Attempts:`.
+
 - Local operational telemetry, part 3 (ODD criteria): `telemetry.py sync-criteria`, also run by the SessionStart
   and SessionEnd hooks, projects each task file's *Evidence* results (criterion, result, date; never the command
   or its output) and its *Tasks* statuses into the store, as `criterion.verified` and `task.*` events. The

@@ -7,7 +7,7 @@ Rules:
 - **Only the orchestrator writes it.** Agents read their task in it and report; the orchestrator records.
 - **The request is quoted, never paraphrased.** The user's words go in *Request* exactly as given. A later addition or change of scope is quoted too, with its date, and logged under *Decisions and scope changes*. Briefs copy criteria from here word for word.
 - **A task is `done` only with evidence**: its criteria rerun by the orchestrator and logged under *Evidence* with the real result. Code written or a test attempted is not evidence. A criterion that couldn't be verified stays `pending`.
-- **Figures are reported, never estimated.** The *Run log* takes the tokens and duration the tool reported, or `not reported`.
+- **Figures are recorded, never copied or estimated.** Tokens and duration come from the telemetry hooks (`telemetry.py report`). The *Run log* keeps what resuming needs: agent, tier, attempt, result, the first relevant error and where to pick up. With Codex, not recorded yet, it also notes the tokens the subagent's thread shows, or `not reported`.
 - **Links, not copies.** When the repo keeps specs or decision records, link them. `memory/` links to this file and never copies it.
 - The local telemetry reads the *Tasks* table and the *Evidence* lines (criterion, result and date only, never the command or its output) to relate criteria to the agents that worked on each task. It never writes here.
 - `memory-check.py` holds these files to their rules: no secrets or personal data, no task `done` without an *Evidence* line naming it, no `Status: done` while a task isn't, and the *In flight* cell `N/M passed` in `memory/PROJECT_STATE.md` must match the *Evidence* (each criterion's last result). Keep the shapes below so it can read them.
@@ -46,7 +46,7 @@ Status: pending | in progress | blocked (why) | done (only with evidence below)
 - YYYY-MM-DD T1 · TDD skipped: <why no deterministic test fits> · checked with `<command or demo>`
 
 ## Run log
-- YYYY-MM-DD T1 · <agent> · <tier> · attempt <n> · tokens <reported | not reported> · duration <reported | not reported> · <result> · <first error line or —>
+- YYYY-MM-DD T1 · <agent> · <tier> · attempt <n> · <result> · <first error line or —> · <where to pick up, while not done>
 
 ## Decisions and scope changes
 - YYYY-MM-DD <what changed, why, who decided>
