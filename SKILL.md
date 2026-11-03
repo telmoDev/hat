@@ -186,3 +186,21 @@ It should return nothing.
    see what each skill, agent and plugin costs. Codex: trust the project, open `/hooks` once to approve
    the two SessionStart hooks, then `$sync-memory` once per session and `/status` for usage. In both,
    before each push: the gate, `bash .orchestrator/scripts/pre-pr-pass.sh`, `bash .orchestrator/scripts/push-pr.sh`.
+
+## Update an existing workspace
+
+A workspace set up with v0.1.0 or later is brought up to this skill's templates by a script, not by hand
+(an older one goes through `scripts/migrate.sh` first). Only on the user's explicit yes in this session.
+
+1. `bash <this skill's directory>/scripts/update.sh --dry-run <workspace-root>` and show the plan.
+2. `bash <this skill's directory>/scripts/update.sh <workspace-root>`. It creates what is missing, updates a
+   script only if it is still the template of the workspace's `TEMPLATE_VERSION`, keeps a script the user
+   changed and writes the new template next to it as `<file>.new`, adds the missing telemetry hooks to
+   `.claude/settings.json`, the missing lines to `.gitignore` and the missing keys to `orchestrator.conf`, and
+   sets `TEMPLATE_VERSION` last. It refuses, changing nothing, when the version can't be established, the layer
+   has uncommitted changes or an earlier `.new` differs; a failure midway lists what was done and what is
+   pending. It never deletes and never commits.
+3. Do what it lists under *Needs your attention*: merge each `.new` into its file (keeping the user's change)
+   and delete it, and apply the printed *Workspaces* steps to the text the script never edits (`AGENTS.md`,
+   `odd/README.md`, `memory/`). Then the checks of step 4 above, a commit if the root is versioned, and a new
+   session so the hooks load.

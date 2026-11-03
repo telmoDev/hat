@@ -32,10 +32,6 @@ into the new version's section.
   `PROGRESS.md` line, now `Attempts:` instead of `Cost:`) keeps agent, tier, attempt, result, first relevant
   error and where to pick up. With Codex, not recorded yet, it still notes the thread's tokens.
 
-  **Workspaces**: copy `reports.py` and `telemetry.py` into `.orchestrator/scripts/` and the skill into
-  `.agents/skills/orchestrator-metrics/` (then `bash .orchestrator/scripts/sync-skills.sh`). In `AGENTS.md`,
-  replace the *Run log* bullet and the *Tool mapping* run-log row with the template's; in `odd/README.md`, the
-  figures rule and the *Run log* line; in `memory/PROGRESS.md`, the `Cost:` line with `Attempts:`.
 
 - Local operational telemetry, part 3 (ODD criteria): `telemetry.py sync-criteria`, also run by the SessionStart
   and SessionEnd hooks, projects each task file's *Evidence* results (criterion, result, date; never the command
@@ -49,8 +45,6 @@ into the new version's section.
   - A small task has no task file: its criteria (in its PR body) are not recorded.
   - `odd_tasks.py`: the task-file parser, moved out of `memory-check.py` unchanged and shared with the telemetry.
 
-  **Workspaces**: copy `odd_tasks.py` with `memory-check.py` into `.orchestrator/scripts/` (the new
-  `memory-check.py` imports it), plus `telemetry.py`.
 
 - API-equivalent cost (`telemetry.py cost`, `api_cost.py`): what the recorded usage would cost through the
   provider's API, at the rates in `.orchestrator/rates.json`. Always labelled an estimate, with the rates' version,
@@ -66,8 +60,6 @@ into the new version's section.
     undervalues 1-hour writes, the 1-hour rate overvalues 5-minute ones), so the report is titled "estimated,
     combined cache-write rate" and is never an exact API cost.
 
-  **Workspaces**: copy `api_cost.py` and `telemetry.py` into `.orchestrator/scripts/`, and add
-  `.orchestrator/rates.json` from the template (empty) if you want the estimate.
 
 - Local operational telemetry, part 1 (the core; no hook calls it yet):
   - `.orchestrator/scripts/telemetry.py`: a versioned event contract (`schema_version` 1: run, task, agent,
@@ -113,9 +105,24 @@ into the new version's section.
   - `AGENTS.md` › *Tool mapping*: the run log no longer copies the Agent result's tokens (last request only).
   - Codex: not wired. Its adapter waits for real hook payloads.
 
-  **Workspaces**: optional until the hooks are wired. To add it now: copy `telemetry.py` and `telemetry.sh`
-  into `.orchestrator/scripts/` and `.orchestrator/hooks/`, add `.orchestrator/telemetry/` to `.gitignore`
-  (or to `.git/info/exclude` with `--no-git` in single-repo mode), and `TELEMETRY="on"` to `orchestrator.conf`.
+- `scripts/update.sh`: updates a workspace set up with v0.1.0 or later to the installed skill's templates. It
+  creates what's missing and updates a script only if it is still the template of the workspace's
+  `TEMPLATE_VERSION` (read from that release's tag); a script you changed is kept, with the new template as
+  `<file>.new` to merge by hand (an earlier, different `.new` stops it). `.claude/settings.json` gains only the
+  missing telemetry hooks, `.gitignore` the missing lines, `orchestrator.conf` the missing keys, and
+  `TEMPLATE_VERSION` last. Text you adapt (`AGENTS.md`, `odd/README.md`, `memory/`, task files) is never edited:
+  it prints the Workspaces steps to apply. Everything is checked and planned before the first write; a failure
+  midway lists what was done and what is pending, with the version unchanged. Refuses a missing or untagged
+  `TEMPLATE_VERSION`, uncommitted changes in the layer, a pre-0.1.0 workspace and a skill that is not a release
+  (`--dev` updates without claiming a version). `--dry-run` shows the plan. Never deletes, never commits.
+- The telemetry store refuses a schema newer than its script knows: it is left as is, never migrated down, and
+  the error says to update the orchestrator.
+- `INSTALL.md` and `USAGE.md`: the telemetry's install, settings, privacy, recovery and compatibility.
+
+**Workspaces:** run `bash <skill>/scripts/update.sh <workspace-root>` (`--dry-run` first to see the plan) and
+  merge any `.new` it lists. Then by hand: in `AGENTS.md`, replace the *Run log* bullet and the *Tool mapping*
+  row on run-log figures with the template's; in `odd/README.md`, the "Figures are…" rule and the *Run log* line;
+  in `memory/PROGRESS.md`, the `Cost:` line with `Attempts:`. Restart the sessions so the hooks load.
 
 ## v0.7.0 — 2026-10-27
 

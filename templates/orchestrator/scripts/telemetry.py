@@ -145,6 +145,10 @@ CREATE TABLE claude_pending (invocation_id TEXT PRIMARY KEY, run_id TEXT, transc
 """)]
 
 
+class NewerStore(Exception):
+    """The store was written by a newer orchestrator: left as is, never migrated down."""
+
+
 def _ms_between(a, b):
     if not a or not b:
         return None
@@ -159,6 +163,14 @@ class Store:
             os.makedirs(d, exist_ok=True)
         self.db = sqlite3.connect(path, timeout=2, isolation_level=None)
         self.db.execute("PRAGMA busy_timeout = 2000")
+        # Before any write: a schema newer than this script's is left alone.
+        if self.db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'schema_migrations'").fetchone():
+            newest = self.db.execute("SELECT max(version) FROM schema_migrations").fetchone()[0] or 0
+            known = max(v for v, _ in MIGRATIONS)
+            if newest > known:
+                self.db.close()
+                raise NewerStore("telemetry store schema v%d is newer than this orchestrator's v%d: update the "
+                                 "orchestrator; the store was left as is" % (newest, known))
         self.db.execute("PRAGMA journal_mode = WAL")
         self.db.execute("PRAGMA synchronous = NORMAL")
         self.db.execute("CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT)")
@@ -545,7 +557,11 @@ def _print_report(argv):
     if not os.path.exists(path):
         print("No telemetry recorded yet (%s)." % path)
         return 0
-    store = Store(path)
+    try:
+        store = Store(path)
+    except NewerStore as err:
+        print(str(err))
+        return 1
     try:
         if argv[1] == "cost":
             text = api_cost.report(store.db, rates)
