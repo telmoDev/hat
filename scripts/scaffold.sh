@@ -178,6 +178,7 @@ if [ "$root_git" = no ]; then
     ex="$root/.git/info/exclude"; mkdir -p "$(dirname "$ex")"; touch "$ex"
     for f in "${created[@]+"${created[@]}"}"; do grep -qxF "/${f%% *}" "$ex" || echo "/${f%% *}" >>"$ex"; done
     grep -qxF "/odd/" "$ex" || echo "/odd/" >>"$ex"  # the task files written later
+    grep -qxF "/.orchestrator/telemetry/" "$ex" || echo "/.orchestrator/telemetry/" >>"$ex"  # the local telemetry store
     echo "excluded the new orchestration files in .git/info/exclude"
   fi
 elif [ "$repo_list" != "." ] && [ -f "$root/.gitignore" ]; then

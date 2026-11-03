@@ -11,6 +11,23 @@ into the new version's section.
 
 ## Unreleased
 
+- Local operational telemetry, part 1 (the core; no hook calls it yet):
+  - `.orchestrator/scripts/telemetry.py`: a versioned event contract (`schema_version` 1: run, task, agent,
+    usage, criterion and blocked events), checked on the way in. Each payload key must be in the contract and
+    its strings are short, so prompts, responses and file content can't get in. Usage carries its source
+    (`runtime_reported`, `calculated`, `estimated` or `unavailable`), and `unavailable` carries no tokens.
+  - A SQLite store, `.orchestrator/telemetry/telemetry.db`, with versioned migrations, WAL and a busy timeout.
+    Event ids are deterministic, so a replayed event counts once. A resumed or compacted session reopens its
+    run instead of starting another. Standard library only, no network, no model calls.
+  - `.orchestrator/hooks/telemetry.sh`, the entry the hooks will call: it never fails the session and never
+    prints, noting errors in `.orchestrator/telemetry/errors.log`. Each call logs its own duration in
+    `ingest_log`, so the instrumentation's overhead is measured too. `TELEMETRY="off"` turns it off.
+  - `tests/test_telemetry.py` (run by `tests/smoke.sh`).
+
+  **Workspaces**: optional until the hooks are wired. To add it now: copy `telemetry.py` and `telemetry.sh`
+  into `.orchestrator/scripts/` and `.orchestrator/hooks/`, add `.orchestrator/telemetry/` to `.gitignore`
+  (or to `.git/info/exclude` with `--no-git` in single-repo mode), and `TELEMETRY="on"` to `orchestrator.conf`.
+
 ## v0.7.0 — 2026-10-27
 
 - The flow is **Organic Driven Development (ODD)**: the process grows only as far as the request needs.

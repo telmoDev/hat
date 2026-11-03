@@ -56,6 +56,8 @@ ok "no placeholder left unrendered"
 cd "$ws"
 for f in .orchestrator/scripts/*.sh .orchestrator/hooks/*.sh; do bash -n "$f" || die "bash -n $f"; done; ok "scripts parse"
 run "memory-check.py compiles" $py -m py_compile .orchestrator/scripts/memory-check.py
+run "telemetry.py compiles" $py -m py_compile .orchestrator/scripts/telemetry.py
+run "telemetry unit tests" $py -m unittest discover -s "$here/tests"
 run "skill copies in sync" bash .orchestrator/scripts/sync-skills.sh --check
 if $py -c 'import tomllib' 2>/dev/null; then
   run "Codex TOML parses" $py -c "import tomllib,sys; [tomllib.load(open(f,'rb')) for f in sys.argv[1:]]" .codex/*.toml .codex/agents/*.toml
