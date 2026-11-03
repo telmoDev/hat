@@ -182,7 +182,7 @@ class RunsWithoutAgents(Base):
     def test_left_out_by_agent_level_filters(self):
         out = rp.metrics(self.s.db, {"agent": "api-dev"}, "runtime", self.norates)
         self.assertIn("| claude-code | 2 |", out)
-        self.assertIn("runs without agent runs are left out by the agent, model, task or status filter", out)
+        self.assertIn("Runs without agent runs are left out by the agent, model, task or status filter (1 here)", out)
 
     def test_only_runs_without_agents(self):
         s = t.Store(os.path.join(self.root, "only.db"))
