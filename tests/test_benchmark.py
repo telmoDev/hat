@@ -335,11 +335,12 @@ class NoModelCalls(unittest.TestCase):
         import ast
         with open(os.path.join(REPO, "scripts", "benchmark.py")) as f:
             tree = ast.parse(f.read())
-        where = set()
+        where = set()  # functions that build a command running the claude binary
         for fn in ast.walk(tree):
             if isinstance(fn, ast.FunctionDef):
                 for n in ast.walk(fn):
-                    if isinstance(n, ast.Constant) and n.value == "claude":
+                    if isinstance(n, ast.List) and n.elts and isinstance(n.elts[0], ast.Constant) \
+                            and n.elts[0].value == "claude":
                         where.add(fn.name)
         self.assertEqual(where, {"run_command"})
 
