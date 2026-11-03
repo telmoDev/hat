@@ -38,8 +38,8 @@ class Sync(unittest.TestCase):
             body = f.read()
         self.write(body.replace("\n## Run log", line + "\n\n## Run log"))
 
-    def sync(self, run=None, phase="manual", at="2026-11-03T10:00:00Z"):
-        return t.sync_criteria(self.s, self.root, run, phase, now=at)
+    def sync(self, run=None, phase=None, at="2026-11-03T10:00:00Z"):  # phase: kept to read the tests as sessions
+        return t.sync_criteria(self.s, self.root, run, now=at)
 
     def criteria(self):
         return self.s.db.execute("SELECT criterion_id, status, verification_method, verified_at, run_id FROM criteria "
@@ -95,33 +95,20 @@ class Sync(unittest.TestCase):
 
 
 class Attribution(Sync):
-    """criteria.run_id names a run only when that run is shown to have logged the evidence: the line appeared
-    between the run's own start and end syncs, and no other run had a start sync open."""
+    """criteria.run_id names a run only with explicit evidence that the run made the check. A task file's Evidence
+    line carries none (date, task, criterion, result), so every criterion keeps run_id NULL, whenever the line
+    appeared: the task links it to the agents. Timing between syncs is not evidence."""
 
-    def test_history_is_never_attributed(self):
+    def test_history_is_not_attributed(self):
         self.sync("claude:s1", "start")
         self.sync("claude:s1", "end", at="2026-11-03T10:30:00Z")
         self.assertEqual({r[4] for r in self.criteria()}, {None})
 
-    def test_evidence_logged_during_the_run_is_attributed(self):
+    def test_a_line_that_appears_during_a_run_is_not_attributed_either(self):
         self.sync("claude:s1", "start")
         self.add_evidence("- 2026-11-03 T2 · O3 · `npm test -- form` → passed: 3 passed")
         self.sync("claude:s1", "end", at="2026-11-03T10:30:00Z")
-        attributed = {r[0]: r[4] for r in self.criteria()}
-        self.assertEqual(attributed, {"login#T1#O1": None, "login#T1#O2": None, "login#T2#O3": "claude:s1"})
-
-    def test_no_start_sync_means_no_attribution(self):
-        self.sync("claude:s1", "start")
-        self.add_evidence("- 2026-11-03 T2 · O3 · `npm test -- form` → passed: 3 passed")
-        self.sync("claude:s2", "end", at="2026-11-03T10:30:00Z")  # s2 never synced at its start
-        self.assertIsNone(dict((r[0], r[4]) for r in self.criteria())["login#T2#O3"])
-
-    def test_two_open_runs_mean_no_attribution(self):
-        self.sync("claude:s1", "start")
-        self.sync("claude:s2", "start", at="2026-11-03T10:05:00Z")
-        self.add_evidence("- 2026-11-03 T2 · O3 · `npm test -- form` → passed: 3 passed")
-        self.sync("claude:s1", "end", at="2026-11-03T10:30:00Z")
-        self.assertIsNone(dict((r[0], r[4]) for r in self.criteria())["login#T2#O3"])
+        self.assertEqual({r[4] for r in self.criteria()}, {None})
 
     def test_a_manual_sync_attributes_nothing(self):
         self.add_evidence("- 2026-11-03 T2 · O3 · `npm test -- form` → passed: 3 passed")
@@ -147,8 +134,8 @@ class Hooks(unittest.TestCase):
             f.write(body.replace("\n## Run log", "- 2026-11-03 T2 · O3 · `npm test` → passed: ok\n\n## Run log"))
         t.claude_hook(s, {"hook_event_name": "SessionEnd", "session_id": "s1"}, {}, "ws", now="2026-11-03T10:30:00Z",
                       root=root)
-        self.assertEqual(s.db.execute("SELECT run_id FROM criteria WHERE criterion_code = 'O3'").fetchone()[0],
-                         "claude:s1")
+        row = s.db.execute("SELECT status, run_id FROM criteria WHERE criterion_code = 'O3'").fetchone()
+        self.assertEqual(row, ("passed", None))  # synced at SessionEnd; no evidence the session made the check
 
 
 class Benchmark(unittest.TestCase):
@@ -164,10 +151,10 @@ class Benchmark(unittest.TestCase):
         s = t.Store(os.path.join(root, "t.db"))
         self.addCleanup(s.close)
         start = time.perf_counter()
-        t.sync_criteria(s, root, None, "manual", now="2026-11-03T10:00:00Z")
+        t.sync_criteria(s, root, None, now="2026-11-03T10:00:00Z")
         first = (time.perf_counter() - start) * 1000
         start = time.perf_counter()
-        t.sync_criteria(s, root, None, "manual", now="2026-11-03T11:00:00Z")
+        t.sync_criteria(s, root, None, now="2026-11-03T11:00:00Z")
         again = (time.perf_counter() - start) * 1000
         print("\nbenchmark T5: 100 task files, first sync %.0f ms, unchanged resync %.0f ms" % (first, again))
         self.assertLess(again, 200)
