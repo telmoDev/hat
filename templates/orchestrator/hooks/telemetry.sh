@@ -5,6 +5,7 @@
 root="$(cd "$(dirname "$0")/../.." && pwd)"  # the workspace root, whichever tool runs this
 [ -f "$root/.orchestrator/orchestrator.conf" ] && . "$root/.orchestrator/orchestrator.conf" >/dev/null 2>&1
 [ "${TELEMETRY:-on}" = off ] && exit 0
+export TEMPLATE_VERSION TELEMETRY_TRANSCRIPTS
 py=""
 for c in python3 python; do command -v "$c" >/dev/null 2>&1 && { py=$c; break; }; done
 [ -z "$py" ] && command -v py >/dev/null 2>&1 && py="py -3"

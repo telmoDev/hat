@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Local operational telemetry: the event contract and the SQLite store it projects into.
   python3 .orchestrator/scripts/telemetry.py ingest < events.json   (a JSON event, a list, or one per line)
+  python3 .orchestrator/scripts/telemetry.py hook claude < payload    (a Claude Code hook's input)
 Hooks call it through .orchestrator/hooks/telemetry.sh, which never fails the session and prints nothing.
 The store is .orchestrator/telemetry/telemetry.db (ORCH_TELEMETRY_DB overrides it), errors go to errors.log next
 to it, and each call logs its own duration in ingest_log, so the instrumentation's overhead is measured too.
@@ -15,6 +16,7 @@ import datetime  # noqa: E402
 import hashlib  # noqa: E402
 import json  # noqa: E402
 import os  # noqa: E402
+import re  # noqa: E402
 import sqlite3  # noqa: E402
 import sys  # noqa: E402
 
@@ -40,7 +42,7 @@ EVENTS = {
 STATUSES = {
     "run": ("running", "completed", "failed"),
     "task": ("pending", "in_progress", "blocked", "done", "failed"),
-    "agent": ("running", "success", "failed"),
+    "agent": ("running", "completed", "success", "failed"),
     "criterion": ("passed", "failed", "blocked", "pending"),
 }
 
@@ -228,19 +230,29 @@ class Store:
               (task, p.get("agent_id"), p.get("agent_type"), p.get("runtime"), p.get("model"), p.get("retry_number"),
                p.get("parent_invocation_id"), inv))
             if kind == "agent.started":
-                x("UPDATE agent_invocations SET started_at = ?, status = 'running' WHERE invocation_id = ?", (ts, inv))
+                # Launch and start events may arrive after the stop: they never reopen a finished invocation.
+                x("UPDATE agent_invocations SET started_at = coalesce(started_at, ?), "
+                  "status = CASE WHEN finished_at IS NULL THEN 'running' ELSE status END WHERE invocation_id = ?",
+                  (ts, inv))
             elif kind in ("agent.completed", "agent.failed"):
-                started = x("SELECT started_at FROM agent_invocations WHERE invocation_id = ?", (inv,)).fetchone()[0]
+                started, had, had_src = x("SELECT started_at, duration_ms, duration_source FROM agent_invocations "
+                                          "WHERE invocation_id = ?", (inv,)).fetchone()
                 dur, src = p.get("duration_ms"), p.get("duration_source") or "runtime_reported"
-                if dur is None:
+                if dur is None and had_src == "runtime_reported":
+                    dur, src = had, had_src  # a reported duration beats one calculated from hook times
+                elif dur is None:
                     dur, src = _ms_between(started, ts), "calculated"
                 x("UPDATE agent_invocations SET finished_at = ?, status = ?, duration_ms = ?, duration_source = ?, "
                   "error = coalesce(?, error) WHERE invocation_id = ?",
-                  (ts, p.get("status") or ("success" if kind == "agent.completed" else "failed"), dur,
+                  (ts, p.get("status") or ("completed" if kind == "agent.completed" else "failed"), dur,
                    src if dur is not None else None, p.get("error"), inv))
+            if task and p.get("retry_number") is None:
+                self._number_attempt(inv, task)
         elif kind == "usage.reported":
+            # One row per invocation and model: a continued agent reports its new totals, which replace the old.
+            uid = "use_" + hashlib.sha256(json.dumps([inv, p.get("model")]).encode()).hexdigest()[:24]
             x("INSERT OR REPLACE INTO usage_records VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-              ("use_" + e["event_id"][4:], inv, run, p.get("model")) + tuple(p.get(k) for k in TOKENS)
+              (uid, inv, run, p.get("model")) + tuple(p.get(k) for k in TOKENS)
               + (p.get("requests"), p["source"], p.get("parser_version"), p.get("reason"), ts))
         elif kind == "criterion.verified":
             cid = "%s#%s" % (task, p["criterion_code"])
@@ -248,6 +260,103 @@ class Store:
             if last is None or last[0] <= ts:
                 x("INSERT OR REPLACE INTO criteria VALUES (?, ?, ?, ?, ?, ?, ?)",
                   (cid, task, run, p["criterion_code"], p["status"], p.get("verification_method"), ts))
+
+
+    def _number_attempt(self, inv, task):
+        """retry_number = earlier invocations of the same agent type on the same task; parent = the last of them."""
+        x = self.db.execute
+        kind, started, parent = x("SELECT agent_type, started_at, parent_invocation_id FROM agent_invocations "
+                                  "WHERE invocation_id = ?", (inv,)).fetchone()
+        if parent is not None or started is None:
+            return
+        prev = [r[0] for r in x("SELECT invocation_id FROM agent_invocations WHERE task_id = ? AND agent_type IS ? "
+                                "AND invocation_id <> ? AND started_at < ? ORDER BY started_at", (task, kind, inv, started))]
+        if prev:
+            x("UPDATE agent_invocations SET retry_number = ?, parent_invocation_id = ? WHERE invocation_id = ?",
+              (len(prev), prev[-1], inv))
+
+
+# Claude Code hooks -> contract events. Payload shapes: code.claude.com/docs/en/hooks, checked on 2.1.308.
+# Only ids, names, statuses and figures are taken: never a prompt, a response or tool input beyond the brief's
+# first-line "Task: ... · Tier: ..." header, which names the task.
+_TASK_HEADER = re.compile(r"Task:\s*(\S+?)(?:\.md\s*›\s*(T\d+))?\s*·")
+
+
+def _task_of(prompt):
+    m = _TASK_HEADER.match(prompt.lstrip()) if isinstance(prompt, str) else None
+    if not m:
+        return None
+    return (os.path.basename(m.group(1)) + ("#" + m.group(2) if m.group(2) else ""))[:MAX_STR]
+
+
+def _clean(d):
+    return {k: v for k, v in d.items() if v is not None}
+
+
+def _short(v):
+    return v[:MAX_STR] if isinstance(v, str) else None
+
+
+def claude_events(p, env, project):
+    kind, sid = p.get("hook_event_name"), p.get("session_id")
+    if not isinstance(sid, str) or not sid:
+        return []
+    run, rt = "claude:" + sid, "claude-code"
+
+    def agent_id(v):
+        return v[len("agent-"):] if isinstance(v, str) and v.startswith("agent-") else v
+
+    if kind == "SessionStart":
+        return [make_event("run.started", run, payload=_clean({
+            "runtime": rt, "project_id": project, "source": _short(p.get("source")),
+            "orchestrator_version": _short(env.get("TEMPLATE_VERSION"))}))]
+    if kind == "SessionEnd":
+        return [make_event("run.completed", run, payload=_clean({"status": "completed",
+                                                                  "reason": _short(p.get("reason"))}))]
+    if kind in ("SubagentStart", "SubagentStop"):
+        aid = agent_id(p.get("agent_id"))
+        if not isinstance(aid, str) or not aid:
+            return []
+        inv, base = "claude:" + aid, {"agent_id": aid, "agent_type": _short(p.get("agent_type")), "runtime": rt}
+        if kind == "SubagentStart":
+            return [make_event("agent.started", run, invocation_id=inv, payload=_clean(base), key="start")]
+        out = [make_event("agent.completed", run, invocation_id=inv, payload=_clean(base))]
+        import claude_transcript  # next to this file; only SubagentStop needs it
+        if env.get("TELEMETRY_TRANSCRIPTS", "on") == "off":
+            models, reason = None, "transcript reading off"
+        else:
+            models, reason = claude_transcript.usage(p.get("agent_transcript_path"))
+        if models is None:
+            out.append(make_event("usage.reported", run, invocation_id=inv, key="unavailable",
+                                  payload={"source": "unavailable", "reason": reason}))
+        else:
+            for model, u in sorted(models.items()):
+                out.append(make_event("usage.reported", run, invocation_id=inv, key="%s@%d" % (model, u["requests"]),
+                                      payload=dict(u, model=model, source="runtime_reported",
+                                                   parser_version=claude_transcript.PARSER_VERSION)))
+        return out
+    if kind in ("PostToolUse", "PostToolUseFailure") and p.get("tool_name") in ("Agent", "Task"):
+        ti = p.get("tool_input") if isinstance(p.get("tool_input"), dict) else {}
+        task, atype = _task_of(ti.get("prompt")), _short(ti.get("subagent_type"))
+        if kind == "PostToolUseFailure":
+            tid = p.get("tool_use_id")
+            return [make_event("agent.failed", run, task_id=task, invocation_id="claude:" + tid,
+                               payload=_clean({"agent_type": atype, "runtime": rt, "status": "failed"}))] if tid else []
+        r = p.get("tool_response") if isinstance(p.get("tool_response"), dict) else {}
+        aid = agent_id(r.get("agentId"))
+        if not isinstance(aid, str) or not aid:
+            return []
+        base = _clean({"agent_id": aid, "agent_type": atype, "runtime": rt, "model": _short(r.get("resolvedModel"))})
+        if r.get("status") == "completed":
+            # A foreground result: its totalTokens/usage cover only the last request, so they are not recorded.
+            dur = r.get("totalDurationMs")
+            if isinstance(dur, int) and not isinstance(dur, bool) and dur >= 0:
+                base.update(duration_ms=dur, duration_source="runtime_reported")
+            return [make_event("agent.completed", run, task_id=task, invocation_id="claude:" + aid, payload=base,
+                               key="result")]
+        return [make_event("agent.started", run, task_id=task, invocation_id="claude:" + aid, payload=base,
+                           key="launch")]
+    return []
 
 
 def db_path():
@@ -275,19 +384,20 @@ def _read_events(text):
     return data if isinstance(data, list) else [data]
 
 
-def ingest(stdin_text, path):
+def ingest(command, read_events, path):
+    """Record the events read_events() returns. Any error is noted, never raised."""
     store, events, recorded = None, [], 0
     try:
-        events = _read_events(stdin_text)
+        events = read_events()
         store = Store(path)
         for e in events:
             recorded += store.record(e)
-        store.log_ingest("ingest", len(events), recorded, True)
+        store.log_ingest(command, len(events), recorded, True)
     except Exception as err:
-        _note_error(path, "ingest", err)
+        _note_error(path, command, err)
         if store is not None:
             try:
-                store.log_ingest("ingest", len(events), recorded, False, type(err).__name__)
+                store.log_ingest(command, len(events), recorded, False, type(err).__name__)
             except Exception:
                 pass
     finally:
@@ -296,7 +406,7 @@ def ingest(stdin_text, path):
 
 
 def main(argv):
-    if len(argv) < 2 or argv[1] not in ("ingest",):
+    if argv[1:2] != ["ingest"] and argv[1:3] != ["hook", "claude"]:
         print(__doc__.strip(), file=sys.stderr)
         return 2
     path = db_path()
@@ -305,7 +415,12 @@ def main(argv):
             os.makedirs(os.path.dirname(path))
         except OSError:
             return 0
-    ingest(sys.stdin.read(), path)
+    text = sys.stdin.read()
+    if argv[1] == "ingest":
+        ingest("ingest", lambda: _read_events(text), path)
+    else:
+        root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        ingest("hook claude", lambda: claude_events(json.loads(text), os.environ, os.path.basename(root)), path)
     return 0
 
 

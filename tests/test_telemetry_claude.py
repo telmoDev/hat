@@ -149,7 +149,7 @@ class Adapter(unittest.TestCase):
                           use["payload"]["parser_version"]), ("usage.reported", "runtime_reported", 3, ct.PARSER_VERSION))
         self.assertNotIn("SECRET", json.dumps([done, use]))
         _, off = self.events(stop, TELEMETRY_TRANSCRIPTS="off")
-        self.assertEqual((off["payload"]["source"], off["payload"]["input_tokens"]), ("unavailable", None))
+        self.assertEqual((off["payload"]["source"], off["payload"].get("input_tokens")), ("unavailable", None))
 
     def test_failed_launch(self):
         [e] = self.events(payload("PostToolUseFailure", tool_name="Agent", tool_use_id="toolu_9", error="boom"))
