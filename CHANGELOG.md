@@ -11,6 +11,18 @@ into the new version's section.
 
 ## Unreleased
 
+- Telemetry measures the main (orchestrator) session too, not only the agent runs: `claude:<session>:main`, read
+  from the session's own transcript with the same strict parser (`unavailable` on any shape it doesn't know; never
+  prompts, answers or code). Queued at SessionStart and read only at SessionEnd, never while the session grows;
+  unreadable there, it stays pending and the next session's start makes the last attempt (also for a session
+  killed without SessionEnd). Idempotent; a resumed session replaces its totals. The main transcript holds no
+  subagent lines (checked on 97 real ones), so nothing is counted twice. Never a delegation (no agent id).
+  `TELEMETRY_TRANSCRIPTS="off"` records it unavailable. Event contract unchanged.
+  - Reports: a `main` row in `usage`, a *Main session* table in `metrics`, and the run report's line "Main session
+    tokens · agent runs tokens". Delegations, coverage and efficiency are the agent runs' as before.
+  - Benchmark results: `main_tokens`, `tokens` (agent runs; zero when none ran) and `total_tokens`; the comparison
+    uses the total and adds *Tokens by kind* (main, agents, input, output, cache read and write, agent coverage).
+
 - Benchmark B1: its check expected five functions, but `Cart.total` also calls `Cart.quantity` and `catalog.get`
   (seen in the pilot, where both flows rightly named them and were graded wrong). Now the seven. A result records
   the task hash it is graded under, and `regraded_from` with the earlier one when the grading changed after

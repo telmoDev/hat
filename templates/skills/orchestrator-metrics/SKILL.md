@@ -25,6 +25,8 @@ Filters for `usage` and `metrics`: `--project`, `--runtime`, `--model`, `--agent
 How to read them:
 
 - `—` means not available, never zero. Coverage says how many finished agent runs reported usage.
+- The main session (the orchestrator's own tokens) shows apart from the agent runs, never added to them.
+  Answering without delegating can be the right call.
 - Efficiency and cost per task show only when every task in the row is fully covered; otherwise "incomplete".
 - "Succeeded" means finished without a runtime error, not that the work is right: the criteria say that.
 - Criteria come from the task files and are not attributed to runs. A task without criteria hasn't failed.

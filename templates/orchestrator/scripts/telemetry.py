@@ -336,13 +336,17 @@ def claude_events(p, env, project, now=None):
     def agent_id(v):
         return v[len("agent-"):] if isinstance(v, str) and v.startswith("agent-") else v
 
+    main = {"agent_type": "main", "runtime": rt}  # the session's own invocation: never a delegation (no agent_id)
     if kind == "SessionStart":
         return [make_event("run.started", run, timestamp=now, payload=_clean({
             "runtime": rt, "project_id": project, "source": _short(p.get("source")),
-            "orchestrator_version": _short(env.get("TEMPLATE_VERSION"))}))]
+            "orchestrator_version": _short(env.get("TEMPLATE_VERSION"))})),
+            make_event("agent.started", run, timestamp=now, invocation_id=run + ":main", payload=main,
+                       key="main-start")]
     if kind == "SessionEnd":
         return [make_event("run.completed", run, timestamp=now, payload=_clean({"status": "completed",
-                                                                  "reason": _short(p.get("reason"))}))]
+                                                                  "reason": _short(p.get("reason"))})),
+                make_event("agent.completed", run, timestamp=now, invocation_id=run + ":main", payload=main)]
     if kind in ("SubagentStart", "SubagentStop"):
         aid = agent_id(p.get("agent_id"))
         if not isinstance(aid, str) or not aid:
@@ -399,6 +403,9 @@ def claude_events(p, env, project, now=None):
 # At SubagentStop the transcript may still lack the subagent's last request (seen live on 2.1.308: written ~0.1 s
 # after the hook), so its usage is read later: by a hook of the same session once the stop is 2 s old, at SessionEnd,
 # or at the next SessionStart for a session that ended without one. Only then may it be recorded unavailable.
+# The main session (claude:<session>:main) is queued at SessionStart with the session's own transcript, which holds
+# no subagent lines (they have their own files), so nothing is counted twice. It is read only at SessionEnd, never
+# while it grows; unreadable there, it stays pending, and the next session's SessionStart makes the last attempt.
 _SETTLE_S = 2
 
 
@@ -412,15 +419,25 @@ def claude_hook(store, p, env, project, now=None, root=None):
     if kind == "SubagentStop" and len(events) == 1 and isinstance(tp, str) and tp:  # no unavailable recorded yet
         store.db.execute("INSERT OR REPLACE INTO claude_pending VALUES (?, ?, ?, ?)",
                          (events[0]["invocation_id"], run, tp, now))
+    reading = env.get("TELEMETRY_TRANSCRIPTS", "on") != "off"
+    main_tp = p.get("transcript_path")
+    if kind == "SessionStart" and events and reading and isinstance(main_tp, str) and main_tp:
+        store.db.execute("INSERT OR REPLACE INTO claude_pending VALUES (?, ?, ?, ?)", (run + ":main", run, main_tp, now))
+    if kind == "SessionEnd" and events and not reading:
+        for e in _usage_events(run, run + ":main", None, "transcript reading off", None, now):
+            seen, recorded = seen + 1, recorded + store.record(e)
     cutoff = utc(datetime.datetime.strptime(now, "%Y-%m-%dT%H:%M:%S.%fZ").replace(tzinfo=datetime.timezone.utc)
                  - datetime.timedelta(seconds=_SETTLE_S))
+    ending = kind in ("SessionEnd", "SessionStart")
     rows = store.db.execute(
         "SELECT invocation_id, run_id, transcript_path FROM claude_pending WHERE "
-        "(run_id = ? AND (? OR stopped_at <= ?)) OR (? AND run_id <> ?)",
-        (run, kind == "SessionEnd", cutoff, kind == "SessionStart", run)).fetchall()
+        "((run_id = ? AND (? OR stopped_at <= ?)) OR (? AND run_id <> ?)) AND (? OR invocation_id NOT LIKE '%:main')",
+        (run, kind == "SessionEnd", cutoff, kind == "SessionStart", run, ending)).fetchall()
     import claude_transcript  # next to this file
-    final = kind in ("SessionEnd", "SessionStart")  # last chance for these: unreadable now means unavailable
     for inv, prun, path in rows:
+        # The last chance: a later session's start for anything; its own end for a subagent. A main session
+        # unreadable at its end waits for the next session.
+        final = kind == "SessionStart" or (kind == "SessionEnd" and not inv.endswith(":main"))
         models, reason = claude_transcript.usage(path)
         if models is None and not final:
             continue

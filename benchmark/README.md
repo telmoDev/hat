@@ -46,5 +46,6 @@ python3 templates/orchestrator/scripts/telemetry.py benchmark benchmark/results/
 Runs are compared only with the same task hash (request and criteria, hidden checks, fixture, the harness code that
 grades the task, and the session's settings), runtime and named models; a run without a named model or with a
 `blocked` criterion (B4 without Node) isn't either. Anything else is "not comparable". Quality and consumption are shown apart, each as n, median and range; a quality regression (any mandatory
-criterion passing less often, or more failing tests) is never read as an efficiency gain, overlapping ranges show no difference, tokens with incomplete coverage aren't
+criterion passing less often, or more failing tests) is never read as an efficiency gain, overlapping ranges show no difference, tokens are broken down by kind (main
+session, agent runs, input, output, cache read and write), tokens with incomplete coverage aren't
 compared, and fewer than 3 runs on a side is flagged. Wall time and cumulative agent time are kept apart.
