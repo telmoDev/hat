@@ -157,6 +157,42 @@ class Metrics(Base):
         self.assertIn("Hook calls 4 · errors 1 · in-process median 6.5 ms · p95 100.0 ms", out)
 
 
+class RunsWithoutAgents(Base):
+    """A session that launched no agent is still a run: it counts where runs can be grouped (runtime, project,
+    run) and is reported apart where they can't (agent, model, task)."""
+
+    def setUp(self):
+        super().setUp()
+        self.s.record(t.make_event("run.started", "claude:r3", timestamp="2026-11-03T12:00:00Z",
+                                   payload={"runtime": "claude-code", "project_id": "ws"}))
+        self.s.record(t.make_event("run.completed", "claude:r3", timestamp="2026-11-03T12:00:05Z",
+                                   payload={"status": "completed"}))
+
+    def test_counted_by_runtime_project_and_run(self):
+        out = rp.metrics(self.s.db, {}, "runtime", self.norates)
+        self.assertIn("| claude-code | 3 | 302.5 s | 5 |", out)  # wall median of 600 s and 5 s
+        self.assertIn("| ws | 3 |", rp.metrics(self.s.db, {}, "project", self.norates))
+        self.assertIn("| claude:r3 | 1 | 5.0 s | 0 | 0 | 0 | 0 | 0/0 (no data) |",
+                      rp.metrics(self.s.db, {}, "run", self.norates))
+
+    def test_reported_apart_by_agent(self):
+        out = rp.metrics(self.s.db, {}, "agent", self.norates)
+        self.assertIn("Runs: 3, of which 1 had no agent runs (not in the rows above)", out)
+
+    def test_left_out_by_agent_level_filters(self):
+        out = rp.metrics(self.s.db, {"agent": "api-dev"}, "runtime", self.norates)
+        self.assertIn("| claude-code | 2 |", out)
+        self.assertIn("runs without agent runs are left out by the agent, model, task or status filter", out)
+
+    def test_only_runs_without_agents(self):
+        s = t.Store(os.path.join(self.root, "only.db"))
+        self.addCleanup(s.close)
+        s.record(t.make_event("run.started", "claude:e1", timestamp="2026-11-03T12:00:00Z",
+                              payload={"runtime": "claude-code", "project_id": "ws"}))
+        out = rp.metrics(s.db, {}, "runtime", self.norates)
+        self.assertIn("| claude-code | 1 | — | 0 |", out)  # still open: no wall time yet
+
+
 class RunReport(Base):
     def test_one_run(self):
         out = rp.report(self.s.db, "claude:r1", self.norates)
