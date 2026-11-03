@@ -285,8 +285,10 @@ def _fixture_totals():
     return json.loads(r.stdout)
 
 
-B1_FUNCTIONS = {"cart.Cart.total", "cart.Cart.subtotal", "pricing.apply_discounts", "pricing.bulk_discount",
-                "pricing.coupon_discount"}
+# Every function Cart.total calls on its way, as the pilot's answers rightly listed (quantity feeds the bulk discount,
+# catalog.get the subtotal).
+B1_FUNCTIONS = {"cart.Cart.total", "cart.Cart.subtotal", "cart.Cart.quantity", "catalog.get",
+                "pricing.apply_discounts", "pricing.bulk_discount", "pricing.coupon_discount"}
 
 
 def _check_b1(ws):
@@ -423,15 +425,18 @@ def write_result(ws, label, out_dir):
     c = check(meta["task"], ws)
     tel = _telemetry(ws)
     crit = c["criteria"]
+    current = task_hash(meta["task"])  # the hash it is graded under; if it changed since prepare, say so
     result = {
         "schema": 1, "label": label, "date": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d"),
-        "task": meta["task"], "task_hash": meta["task_hash"], "flow": meta["flow"],
+        "task": meta["task"], "task_hash": current, "flow": meta["flow"],
         "skill_commit": meta["skill_commit"], "runtime": "claude-code",
         "claude_code_version": run_meta.get("claude_code_version", "unavailable"),
         "models": {"main": run_meta.get("main_model", "unavailable"),
                    "agents": tel.pop("agent_models") if tel else []},
         "criteria": crit, "criteria_passed": sum(s == "passed" for s in crit.values()), "criteria_total": len(crit),
         "tests": c["tests"], "telemetry": tel, "files_consulted": "unavailable"}
+    if current != meta["task_hash"]:
+        result["regraded_from"] = meta["task_hash"]
     os.makedirs(out_dir, exist_ok=True)
     n = 1
     while os.path.exists(os.path.join(out_dir, "%s-%s-%d.json" % (meta["task"], meta["flow"], n))):

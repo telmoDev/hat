@@ -11,6 +11,12 @@ into the new version's section.
 
 ## Unreleased
 
+- Benchmark B1: its check expected five functions, but `Cart.total` also calls `Cart.quantity` and `catalog.get`
+  (seen in the pilot, where both flows rightly named them and were graded wrong). Now the seven. A result records
+  the task hash it is graded under, and `regraded_from` with the earlier one when the grading changed after
+  `prepare`. Pilot results: the originals stay as they were (3/4, old hash); `*-regraded` re-check the stored
+  answers with no model (4/4, new hash, `regraded_from` the old).
+
 - Benchmark (`benchmark/`, `scripts/benchmark.py`): five fixed tasks on a fixed two-repo fixture (B1 explore,
   B2 endpoint, B3 bug across modules, B4 frontend, B5 refactor), checked without any model: B1's answer by its
   JSON facts against the code, B2–B4 by hidden acceptance tests, B5 by an output probe before and after plus the
