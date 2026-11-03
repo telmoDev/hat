@@ -435,6 +435,20 @@ class Compare(unittest.TestCase):
                 self.assertIn("not comparable", out)
                 self.assertIn(name, out)
 
+    def test_a_small_sample_gives_no_directional_reading(self):
+        # Seen in pilot 2: with one run a side, "B used more tokens than A in every run" is true and misleading.
+        for a, b in (([result("A", "x", 1000)], [result("B", "y", 900)]),
+                     ([result("A", "x", 1000)] * 2, [result("B", "y", 1200)] * 2),
+                     ([result("A", "x", 1000, passed=4)], [result("B", "y", 900, passed=3)])):
+            with self.subTest(n=(len(a), len(b))):
+                out = br.compare(*self.dirs(a, b))
+                reading = out.split("## Reading")[1]
+                self.assertIn("fewer than 3 runs on a side", reading)
+                for claim in ("fewer tokens", "more tokens", "ranges overlap", "Quality regressed", "Quality improved"):
+                    self.assertNotIn(claim, reading)
+                self.assertIn("## Quality", out)  # the evidence is still shown
+                self.assertIn("## Tokens by kind", out)
+
     def test_few_runs_and_incomplete_coverage(self):
         out = br.compare(*self.dirs([result("A", "x", 1000)], [result("B", "y", 0, coverage=(1, 2))]))
         self.assertIn("fewer than 3 runs", out)
