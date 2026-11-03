@@ -92,8 +92,9 @@ consumed and how it ended, without asking a model. No network, no extra model ca
 milliseconds and never stops your session (errors go to `.orchestrator/telemetry/errors.log`).
 
 - **Where**: `.orchestrator/telemetry/telemetry.db`, ignored by git. Only you have it.
-- **What it stores**: sessions (start, end, status), agent runs (agent type, model, the task named by the brief's
-  `Task:` line, start, end, status, duration), their tokens as Claude Code reported them (each with its source:
+- **What it stores**: sessions (start, end, status) and each session's own tokens (the main session), agent runs
+  (agent type, model, the task named by the brief's `Task:` line, start, end, status, duration), their tokens as
+  Claude Code reported them (each with its source:
   reported, or unavailable with the reason), the ODD criteria and task statuses read from `odd/tasks/` (criterion,
   result, date), and the hooks' own timing.
 - **What it never stores**: prompts, briefs, agent replies, code, file contents, commands or their output, error
