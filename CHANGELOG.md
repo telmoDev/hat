@@ -11,6 +11,19 @@ into the new version's section.
 
 ## Unreleased
 
+- API-equivalent cost (`telemetry.py cost`, `api_cost.py`): what the recorded usage would cost through the
+  provider's API, at the rates in `.orchestrator/rates.json`. Always labelled an estimate, with the rates' version,
+  date and source, and a warning that it is not what a subscription (Claude Pro or Max, ChatGPT Plus) costs.
+  - `rates.json` ships empty: no price is assumed. Entries are checked; a bad one is left out and named.
+  - The rate in force on the invocation's day applies. Only `runtime_reported` or `calculated` usage is priced;
+    anything else, a missing rate or an unverified runtime is shown as not priced, with the reason. `Decimal`.
+  - Rule: Claude Code (Anthropic: input excludes cache). Codex has none until its real figures are checked.
+  - Limitation: Anthropic's 5-minute and 1-hour cache writes come as one figure, priced at the single
+    `cache_write` rate, so even exact rates don't give an exact cost.
+
+  **Workspaces**: copy `api_cost.py` and `telemetry.py` into `.orchestrator/scripts/`, and add
+  `.orchestrator/rates.json` from the template (empty) if you want the estimate.
+
 - Local operational telemetry, part 1 (the core; no hook calls it yet):
   - `.orchestrator/scripts/telemetry.py`: a versioned event contract (`schema_version` 1: run, task, agent,
     usage, criterion and blocked events), checked on the way in. Each payload key must be in the contract and
