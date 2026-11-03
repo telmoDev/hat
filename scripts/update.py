@@ -64,6 +64,25 @@ def at_version(src, rel):
     return r.stdout if r.returncode == 0 else None
 
 
+def add_telemetry_hooks(settings, template):
+    """Add to settings (a .claude/settings.json dict) the template's telemetry hooks it lacks; returns how many."""
+    added = 0
+    hooks = settings.setdefault("hooks", {})
+    for event, groups in template.get("hooks", {}).items():
+        for g in groups:
+            for h in g["hooks"]:
+                if "telemetry.sh" not in h.get("command", ""):
+                    continue
+                have = [x.get("command") for grp in hooks.get(event, []) for x in grp.get("hooks", [])]
+                if h["command"] in have:
+                    continue
+                group = {"matcher": g["matcher"]} if "matcher" in g else {}
+                group["hooks"] = [h]
+                hooks.setdefault(event, []).append(group)
+                added += 1
+    return added
+
+
 def plan(root, dev):
     """(ops, notes, versions) or Refuse. Reads only."""
     conf_path = os.path.join(root, ".orchestrator", "orchestrator.conf")
@@ -149,20 +168,7 @@ def plan(root, dev):
                 cur = json.loads(cur_text)
             except ValueError:
                 raise Refuse(rel + " is not valid JSON: fix it first")
-            added = 0
-            hooks = cur.setdefault("hooks", {})
-            for event, groups in tpl.get("hooks", {}).items():
-                for g in groups:
-                    for h in g["hooks"]:
-                        if "telemetry.sh" not in h.get("command", ""):
-                            continue
-                        have = [x.get("command") for grp in hooks.get(event, []) for x in grp.get("hooks", [])]
-                        if h["command"] in have:
-                            continue
-                        group = {"matcher": g["matcher"]} if "matcher" in g else {}
-                        group["hooks"] = [h]
-                        hooks.setdefault(event, []).append(group)
-                        added += 1
+            added = add_telemetry_hooks(cur, tpl)
             if added:
                 ops.append({"rel": rel, "action": "merge", "text": json.dumps(cur, indent=2) + "\n",
                             "note": "added %d telemetry hooks" % added})

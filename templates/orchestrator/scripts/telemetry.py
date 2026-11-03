@@ -6,6 +6,7 @@
   python3 .orchestrator/scripts/telemetry.py cost                      (API-equivalent estimate, Markdown)
   python3 .orchestrator/scripts/telemetry.py usage|metrics [--by agent|model|runtime|project|task|run] [filters]
   python3 .orchestrator/scripts/telemetry.py report [<run id>|last]
+  python3 .orchestrator/scripts/telemetry.py benchmark <results dir A> <results dir B>
     filters: --project --runtime --model --agent --task --status --since --until (date or ISO, UTC)
 Hooks call it through .orchestrator/hooks/telemetry.sh, which never fails the session and prints nothing.
 The store is .orchestrator/telemetry/telemetry.db (ORCH_TELEMETRY_DB overrides it), errors go to errors.log next
@@ -550,9 +551,16 @@ def _print_report(argv):
             p.add_argument("--" + k)
     elif argv[1] == "report":
         p.add_argument("run", nargs="?", default="last")
+    elif argv[1] == "benchmark":
+        p.add_argument("a")
+        p.add_argument("b")
     args = p.parse_args(argv[2:])
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")  # the reports use "—" and "·"; Windows pipes default to cp1252
+    if argv[1] == "benchmark":  # reads result files, not the store
+        import benchmark_report
+        sys.stdout.write(benchmark_report.compare(args.a, args.b))
+        return 0
     here = os.path.dirname(os.path.abspath(__file__))
     rates = os.environ.get("ORCH_RATES") or os.path.join(os.path.dirname(here), "rates.json")
     path = db_path()
@@ -583,7 +591,7 @@ def _print_report(argv):
 
 
 def main(argv):
-    if argv[1:2] and argv[1] in ("cost", "usage", "metrics", "report"):
+    if argv[1:2] and argv[1] in ("cost", "usage", "metrics", "report", "benchmark"):
         return _print_report(argv)
     if argv[1:2] not in (["ingest"], ["sync-criteria"]) and argv[1:3] != ["hook", "claude"]:
         print(__doc__.strip(), file=sys.stderr)
