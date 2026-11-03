@@ -58,6 +58,10 @@ for f in .orchestrator/scripts/*.sh .orchestrator/hooks/*.sh; do bash -n "$f" ||
 run "memory-check.py compiles" $py -m py_compile .orchestrator/scripts/memory-check.py
 run "telemetry.py compiles" $py -m py_compile .orchestrator/scripts/telemetry.py
 run "telemetry unit tests" $py -m unittest discover -s "$here/tests"
+echo '{"hook_event_name":"SessionStart","session_id":"smoke","source":"startup"}' | bash .orchestrator/hooks/telemetry.sh hook claude
+$py -c 'import sqlite3,sys; sys.exit(sqlite3.connect(".orchestrator/telemetry/telemetry.db").execute("select count(*) from runs").fetchone()[0] != 1)' \
+  || die "the telemetry hook records a session"
+ok "the telemetry hook records a session"
 run "skill copies in sync" bash .orchestrator/scripts/sync-skills.sh --check
 if $py -c 'import tomllib' 2>/dev/null; then
   run "Codex TOML parses" $py -c "import tomllib,sys; [tomllib.load(open(f,'rb')) for f in sys.argv[1:]]" .codex/*.toml .codex/agents/*.toml

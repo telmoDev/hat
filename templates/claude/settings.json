@@ -16,6 +16,79 @@
             "timeout": 10,
             "statusMessage": "Checking for orchestrator updates",
             "shell": "bash"
+          },
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PROJECT_DIR:-$PWD}/.orchestrator/hooks/telemetry.sh\" hook claude",
+            "timeout": 10,
+            "shell": "bash",
+            "async": true
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PROJECT_DIR:-$PWD}/.orchestrator/hooks/telemetry.sh\" hook claude",
+            "timeout": 10,
+            "shell": "bash"
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PROJECT_DIR:-$PWD}/.orchestrator/hooks/telemetry.sh\" hook claude",
+            "timeout": 10,
+            "shell": "bash",
+            "async": true
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PROJECT_DIR:-$PWD}/.orchestrator/hooks/telemetry.sh\" hook claude",
+            "timeout": 10,
+            "shell": "bash",
+            "async": true
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Agent|Task",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PROJECT_DIR:-$PWD}/.orchestrator/hooks/telemetry.sh\" hook claude",
+            "timeout": 10,
+            "shell": "bash",
+            "async": true
+          }
+        ]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "matcher": "Agent|Task",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PROJECT_DIR:-$PWD}/.orchestrator/hooks/telemetry.sh\" hook claude",
+            "timeout": 10,
+            "shell": "bash",
+            "async": true
           }
         ]
       }

@@ -24,6 +24,18 @@ into the new version's section.
     `ingest_log`, so the instrumentation's overhead is measured too. `TELEMETRY="off"` turns it off.
   - `tests/test_telemetry.py` (run by `tests/smoke.sh`).
 
+- Local operational telemetry, part 2 (Claude Code): the hooks in `.claude/settings.json` record each session
+  (a run), each subagent (start, stop, model, the task from its brief's `Task:` header, attempts at the same
+  task) and its tokens, without model calls. Async, except SessionEnd.
+  - Tokens come from the subagent's transcript when it stops (`claude_transcript.py`): no documented hook gives
+    them, since the Agent result's usage covers only its last request and a background agent's result none. The
+    format is private, so the reader is strict and versioned (`claude-transcript/1`): anything it doesn't
+    recognize records `unavailable`, never a partial sum. Each request spans several lines; it counts each once.
+    `TELEMETRY_TRANSCRIPTS="off"` records `unavailable` instead.
+  - A subagent that stops is `completed`, not `success`: the criteria say whether its work holds.
+  - `AGENTS.md` › *Tool mapping*: the run log no longer copies the Agent result's tokens (last request only).
+  - Codex: not wired. Its adapter waits for real hook payloads.
+
   **Workspaces**: optional until the hooks are wired. To add it now: copy `telemetry.py` and `telemetry.sh`
   into `.orchestrator/scripts/` and `.orchestrator/hooks/`, add `.orchestrator/telemetry/` to `.gitignore`
   (or to `.git/info/exclude` with `--no-git` in single-repo mode), and `TELEMETRY="on"` to `orchestrator.conf`.

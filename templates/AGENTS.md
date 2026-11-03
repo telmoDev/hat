@@ -161,5 +161,5 @@ The flow above is the same in both tools. Only these mechanics differ.
 | Large-task review (step 4) | saved workflow `.claude/workflows/pre-pr-review.js` | skill `$pre-pr-review` (same groups and verifier) |
 | Compaction | `.claude/settings.json`: `autoCompactWindow` 150k (dev agents 150k), idle compaction from 100k | `.codex/config.toml`: `model_auto_compact_token_limit` 150k |
 | Attribution off (only with `ATTRIBUTION="refuse"`) | `.claude/settings.json` › `attribution` empty | `push-pr.sh` refuses it |
-| Run log figures | the usage the Agent result reports (tokens, duration) | what the subagent's thread shows; otherwise `not reported` |
+| Run log figures | the duration the Agent result reports; tokens `not reported` (its usage covers only its last request; the telemetry hooks record the real figures) | what the subagent's thread shows; otherwise `not reported` |
 | Measure | `/usage` (share by skill, subagent, plugin, MCP) | `/status` |
