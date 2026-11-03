@@ -14,6 +14,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # the update tests scaffold a workspace from the v0.7.0 tag
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'

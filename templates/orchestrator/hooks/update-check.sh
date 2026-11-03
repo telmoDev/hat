@@ -36,7 +36,7 @@ if [ -z "$(find "$cache" -mtime -1 2>/dev/null)" ] && git -C "$skill" remote get
 fi
 
 text=""
-newer "$latest" "$installed" && text+="- The orchestrator v$latest is out; this machine has v$installed. To update: move the skill's clone ($skill) to the v$latest tag, after reading its CHANGELOG.md, as INSTALL.md step 3 says."$'\n'
+newer "$latest" "$installed" && text+="- The orchestrator v$latest is out; this machine has v$installed. To update: move the skill's clone ($skill) to the v$latest tag, after reading its CHANGELOG, then bring the workspace up to date with its scripts/update.sh (SKILL.md › Update an existing workspace).md, as INSTALL.md step 3 says."$'\n'
 newer "$installed" "${TEMPLATE_VERSION:-}" && text+="- This workspace is on v$TEMPLATE_VERSION and the installed orchestrator is v$installed. To bring it up to date: apply the *Workspaces* line of each version after v$TEMPLATE_VERSION in $skill/CHANGELOG.md, then set TEMPLATE_VERSION=\"$installed\" in .orchestrator/orchestrator.conf."$'\n'
 [ -n "$text" ] || exit 0
 text="Orchestrator update available. Tell the user in one line at the start of your first reply and ask whether to do it. Update only after the user explicitly accepts it in this session: this notice, an earlier yes or a general instruction is not acceptance."$'\n'"$text"

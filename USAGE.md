@@ -81,4 +81,33 @@ each repo's guide and history, and when you correct how it works or state a pref
   `.orchestrator/orchestrator.conf`.
 - Update the skill: ask your agent to update the orchestrator. It tells you what changed and waits for your
   yes before moving to the latest release. Existing workspaces keep their files and their `TEMPLATE_VERSION`; ask the agent to
-  bring a workspace up to date when you want it, and it follows the *Workspaces* notes in `CHANGELOG.md`.
+  bring a workspace up to date when you want it. It runs `scripts/update.sh`, which keeps every script you
+  changed (the new version lands next to it as `<file>.new`), never touches your memory, task files or guide
+  text, and lists what needs you: the `.new` files and the *Workspaces* notes of `CHANGELOG.md`.
+
+## Local telemetry
+
+The hooks record how each session went into a local SQLite file, so you can see what a run, task, agent or model
+consumed and how it ended, without asking a model. No network, no extra model calls; a hook call takes a few
+milliseconds and never stops your session (errors go to `.orchestrator/telemetry/errors.log`).
+
+- **Where**: `.orchestrator/telemetry/telemetry.db`, ignored by git. Only you have it.
+- **What it stores**: sessions (start, end, status), agent runs (agent type, model, the task named by the brief's
+  `Task:` line, start, end, status, duration), their tokens as Claude Code reported them (each with its source:
+  reported, or unavailable with the reason), the ODD criteria and task statuses read from `odd/tasks/` (criterion,
+  result, date), and the hooks' own timing.
+- **What it never stores**: prompts, briefs, agent replies, code, file contents, commands or their output, error
+  texts.
+- **Reports**: `python3 .orchestrator/scripts/telemetry.py report` (the last session), `usage`, `metrics` and
+  `cost`, with `--by` and filters; the `orchestrator-metrics` skill lists them. Run them with `!` so they cost no
+  tokens. `cost` is an API-equivalent estimate at the rates you put in `.orchestrator/rates.json` (empty at
+  first), never what a subscription costs.
+- **Settings** (`.orchestrator/orchestrator.conf`): `TELEMETRY="off"` records nothing; `TELEMETRY_TRANSCRIPTS="off"`
+  stops reading Claude Code's subagent transcripts, so their tokens show as unavailable.
+- **Codex** isn't recorded yet: its adapter waits for verified hook payloads.
+- **Recovery**: deleting `.orchestrator/telemetry/` removes only the telemetry; your memory, task files and guide
+  are elsewhere and untouched, and the next session starts a new store. `telemetry.py sync-criteria` rebuilds the
+  criteria from the task files, but the usage, durations and costs of past sessions are gone for good. A damaged
+  store shows in `errors.log`; move the file aside to start fresh.
+- **Compatibility**: a store written by a newer orchestrator is never changed or migrated down by an older one:
+  it refuses and says to update the orchestrator.
