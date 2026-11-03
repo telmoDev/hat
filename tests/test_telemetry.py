@@ -17,6 +17,9 @@ TPL = os.path.join(os.path.dirname(HERE), "templates", "orchestrator")
 sys.path.insert(0, os.path.join(TPL, "scripts"))
 import telemetry as t  # noqa: E402
 
+# On Windows a bare "bash" can resolve to WSL's in System32 before Git Bash: take the one on PATH.
+BASH = shutil.which("bash")
+
 
 def ev(event_type, run="claude:s1", task=None, inv=None, ts="2026-11-03T15:30:00Z", key=None, **payload):
     return t.make_event(event_type, run, task_id=task, invocation_id=inv, payload=payload, timestamp=ts, key=key)
@@ -144,13 +147,13 @@ class HookEntry(unittest.TestCase):
             f.write('REPOS="."\n')
         self.db = os.path.join(o, "telemetry", "telemetry.db")
         self.errors = os.path.join(o, "telemetry", "errors.log")
+        self.script = os.path.join(o, "hooks", "telemetry.sh").replace("\\", "/")
 
     def tearDown(self):
         shutil.rmtree(self.root, ignore_errors=True)
 
     def hook(self, stdin):
-        p = subprocess.run(["bash", os.path.join(self.root, ".orchestrator", "hooks", "telemetry.sh"), "ingest"],
-                           input=stdin.encode(), capture_output=True, timeout=60)
+        p = subprocess.run([BASH, self.script, "ingest"], input=stdin.encode(), capture_output=True, timeout=60)
         return p.returncode, p.stdout
 
     def count(self, table):
@@ -187,11 +190,10 @@ class HookEntry(unittest.TestCase):
         self.assertFalse(os.path.exists(self.db))
 
     def test_no_python_does_not_block(self):
-        env = dict(os.environ, PATH=os.path.dirname(shutil.which("bash")))
+        env = dict(os.environ, PATH=os.path.dirname(BASH))
         if any(shutil.which(c, path=env["PATH"]) for c in ("python3", "python", "py")):
             self.skipTest("python lives next to bash here")
-        p = subprocess.run([shutil.which("bash"), os.path.join(self.root, ".orchestrator", "hooks", "telemetry.sh"),
-                            "ingest"], input=b"{}", capture_output=True, env=env, timeout=60)
+        p = subprocess.run([BASH, self.script, "ingest"], input=b"{}", capture_output=True, env=env, timeout=60)
         self.assertEqual((p.returncode, p.stdout), (0, b""))
 
 
