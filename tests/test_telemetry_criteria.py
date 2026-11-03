@@ -70,7 +70,7 @@ class Sync(unittest.TestCase):
             body = f.read()
         self.write(body.replace("## Evidence\n", "## Evidence\n- 2026-10-30 T0 · O9 · `x` → failed: early\n"))
         self.sync(at="2026-11-03T11:00:00Z")
-        self.assertEqual(self.criteria()[0][:2], ("login#T1#O1", "passed"))
+        self.assertEqual({r[0]: r[1] for r in self.criteria()}["login#T1#O1"], "passed")
 
     def test_task_statuses_and_titles_come_from_the_tasks_table(self):
         self.sync()
