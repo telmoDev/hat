@@ -11,6 +11,19 @@ into the new version's section.
 
 ## Unreleased
 
+- Benchmark (`benchmark/`, `scripts/benchmark.py`): five fixed tasks on a fixed two-repo fixture (B1 explore,
+  B2 endpoint, B3 bug across modules, B4 frontend, B5 refactor), checked without any model: B1's answer by its
+  JSON facts against the code, B2–B4 by hidden acceptance tests, B5 by an output probe before and after plus the
+  repo's tests. `prepare` builds a workspace for a task and a flow (`current` or `v0.7.0`) with the same
+  measurement layer in both; `run` is the only model step, on demand, and needs `--model` (`ORCH_BENCH_NO_MODEL`
+  makes it refuse: the tests set it); `result` writes a JSON with ids, versions,
+  criteria, test counts and telemetry (never prompts, answers, code, paths or transcripts; files consulted
+  `unavailable`). Reference solutions prove every task solvable and every check discriminating.
+- `telemetry.py benchmark <dirA> <dirB>` (`benchmark_report.py`): compares results only for the same task hash
+  (request and criteria, checks, fixture, grading code, session settings), runtime and named models; a run with no
+  named model or a blocked criterion isn't compared. Quality and consumption apart, n, median and range; a quality
+  regression (any mandatory criterion passing less often) is never an efficiency gain; overlapping ranges show no difference; wall time apart from cumulative agent time.
+
 - Telemetry reports (`reports.py`, read-only, no model calls): `telemetry.py usage | metrics | report`, Markdown,
   by agent, model, runtime, project, task or run, with filters (`--project --runtime --model --agent --task
   --status --since --until`). Skill `orchestrator-metrics` says which command answers which question; run with
