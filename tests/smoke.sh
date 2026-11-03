@@ -57,7 +57,10 @@ cd "$ws"
 for f in .orchestrator/scripts/*.sh .orchestrator/hooks/*.sh; do bash -n "$f" || die "bash -n $f"; done; ok "scripts parse"
 run "memory-check.py compiles" $py -m py_compile .orchestrator/scripts/memory-check.py
 run "telemetry.py compiles" $py -m py_compile .orchestrator/scripts/telemetry.py
-run "telemetry unit tests" $py -m unittest discover -s "$here/tests"
+# --durations (Python 3.12+) lists the slowest tests, so a slow runner shows where the time goes.
+durations=""; $py -c 'import sys; sys.exit(sys.version_info < (3, 12))' 2>/dev/null && durations="--durations 20"
+run "telemetry unit tests" $py -m unittest discover $durations -s "$here/tests"
+[ -z "$durations" ] || sed -n '/^Slowest test durations/,/^$/p' "$tmp/out" | head -24
 echo '{"hook_event_name":"SessionStart","session_id":"smoke","source":"startup"}' | bash .orchestrator/hooks/telemetry.sh hook claude
 $py -c 'import sqlite3,sys; sys.exit(sqlite3.connect(".orchestrator/telemetry/telemetry.db").execute("select count(*) from runs").fetchone()[0] != 1)' \
   || die "the telemetry hook records a session"

@@ -19,6 +19,13 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Time the runner's basics (diagnosis)
+        shell: bash
+        run: |
+          python -c "import socket,time; t=time.time(); socket.getfqdn('127.0.0.1'); print('getfqdn %.2f s' % (time.time()-t))"
+          python -c "import time,http.server; t=time.time(); s=http.server.HTTPServer(('127.0.0.1',0), http.server.BaseHTTPRequestHandler); print('HTTPServer bind %.2f s' % (time.time()-t)); s.server_close()"
+          d=$(mktemp -d); s=$(date +%s); (cd $d && git init -q && echo x > f && git add f && git -c user.name=t -c user.email=t@e commit -qm x); echo "git init+commit $(( $(date +%s) - s )) s"
+          s=$(date +%s); mkdir -p $d/ws/api && (cd $d/ws/api && git init -q && echo x > f && git add f && git -c user.name=t -c user.email=t@e commit -qm x) && bash scripts/scaffold.sh --git $d/ws >/dev/null; echo "scaffold $(( $(date +%s) - s )) s"
       - name: Scaffold a workspace and run the gate
         shell: bash
         run: bash tests/smoke.sh
