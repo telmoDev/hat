@@ -199,7 +199,7 @@ class HookEntry(unittest.TestCase):
 
 class NoModelOrNetwork(unittest.TestCase):  # F1-13
     def test_imports_only_local_modules(self):
-        allowed = {"datetime", "hashlib", "json", "os", "re", "sqlite3", "sys", "time", "claude_transcript"}
+        allowed = {"datetime", "hashlib", "json", "os", "re", "sqlite3", "sys", "time", "claude_transcript", "odd_tasks"}
         for script in ("telemetry.py", "claude_transcript.py"):
             with open(os.path.join(TPL, "scripts", script)) as f:
                 tree = ast.parse(f.read())

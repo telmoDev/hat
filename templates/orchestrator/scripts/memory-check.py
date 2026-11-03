@@ -21,6 +21,8 @@ import shutil
 import subprocess
 import sys
 
+from odd_tasks import prose, task_state  # the task-file shape, shared with telemetry.py
+
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 MEM = os.path.join(ROOT, "memory")
 FILES = ["PROJECT_STATE.md", "PROGRESS.md", "DECISIONS.md", "NEXT_STEPS.md"]
@@ -51,13 +53,7 @@ SECRET = re.compile(
     re.I,
 )
 GENERATED = re.compile(r"<!-- state:begin.*?<!-- state:end -->", re.S)
-FENCE = re.compile(r"^```.*?^```", re.S | re.M)
 INLINE = re.compile(r"`[^`\n]*`")
-
-
-def prose(body):
-    """The file without its code blocks (entry-shape examples), line numbers kept."""
-    return FENCE.sub(lambda m: "\n" * m.group(0).count("\n"), body)
 
 
 def literals_out(line):
@@ -96,40 +92,6 @@ if os.path.isdir(TASKS):
         if t.endswith(".md"):
             with open(os.path.join(TASKS, t), encoding="utf-8") as fh:
                 tasks["odd/tasks/" + t] = fh.read()
-
-
-def sections(body):
-    """{heading: its text} for the '## ' sections of a task file, code blocks left out."""
-    out, cur = {}, None
-    for line in prose(body).splitlines():
-        if line.startswith("## "):
-            cur = line[3:].strip()
-            out[cur] = []
-        elif cur:
-            out[cur].append(line)
-    return {k: "\n".join(v) for k, v in out.items()}
-
-
-def task_state(body):
-    """A task file's Status, its tasks' statuses, and (criteria passed, criteria total) from its Evidence."""
-    sec = sections(body)
-    status = re.search(r"^Status:\s*(\w+)", body, re.M)
-    rows = re.findall(r"^\|\s*(T\d+)\s*\|.*\|\s*([^|]*?)\s*\|\s*$", sec.get("Tasks", ""), re.M)
-    crit = re.search(r"^Criteria:(.*)$", sec.get("Outcome", ""), re.M)
-    total = sorted(set(re.findall(r"\bO\d+\b", crit.group(1)))) if crit else []
-    latest = {}  # each criterion's last logged result
-    for line in sec.get("Evidence", "").splitlines():
-        res = re.search(r"→\s*(passed|failed)", line)
-        if res:
-            for o in re.findall(r"\bO\d+\b", line.split("→")[0]):
-                latest[o] = res.group(1)
-    return {
-        "status": status.group(1).lower() if status else "",
-        "tasks": [(t, st.lower()) for t, st in rows],
-        "evidence": set(re.findall(r"\bT\d+\b", sec.get("Evidence", ""))),
-        "passed": sum(1 for o in total if latest.get(o) == "passed"),
-        "total": len(total),
-    }
 
 
 state_of = {f: task_state(b) for f, b in tasks.items()}
