@@ -6,7 +6,7 @@ session settings), runtime and named models; a run without a named model, or wit
 Quality and consumption are shown apart, each as n, median and range. A quality regression is never read as an
 efficiency gain (each mandatory criterion's pass rate is compared, not only their count); overlapping ranges show no
 difference; tokens with incomplete coverage aren't compared; fewer
-than 3 runs on a side is flagged. Wall time and cumulative agent time are different measures.
+than 3 runs on a side gets no reading at all, only the tables. Wall time and cumulative agent time are different measures.
 """
 import json
 import os
@@ -130,8 +130,10 @@ def compare(dir_a, dir_b):
             reading.append("- %s: not comparable (%s): no reading." % (task, why))
             continue
         if min(len(a), len(b)) < 3:
-            reading.append("- %s: fewer than 3 runs on a side (%d vs %d): differences may be noise."
+            # Too few runs to tell the flow from the model's variance: the tables show the evidence, no reading.
+            reading.append("- %s: fewer than 3 runs on a side (%d vs %d): no reading; the tables above show the runs."
                            % (task, len(a), len(b)))
+            continue
         ma, mb = statistics.median(qa), statistics.median(qb)
         worse = [c for c in sorted({c for r in a + b for c in (r.get("criteria") or {})})
                  if _rate(b, c) < _rate(a, c)]
