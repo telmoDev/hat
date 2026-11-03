@@ -199,12 +199,13 @@ class HookEntry(unittest.TestCase):
 
 class NoModelOrNetwork(unittest.TestCase):  # F1-13
     def test_imports_only_local_modules(self):
-        allowed = {"datetime", "hashlib", "json", "os", "re", "sqlite3", "sys", "time"}
-        with open(os.path.join(TPL, "scripts", "telemetry.py")) as f:
-            tree = ast.parse(f.read())
-        names = {a.name.split(".")[0] for n in ast.walk(tree) if isinstance(n, ast.Import) for a in n.names}
-        names |= {n.module.split(".")[0] for n in ast.walk(tree) if isinstance(n, ast.ImportFrom) and n.module}
-        self.assertLessEqual(names, allowed)
+        allowed = {"datetime", "hashlib", "json", "os", "re", "sqlite3", "sys", "time", "claude_transcript"}
+        for script in ("telemetry.py", "claude_transcript.py"):
+            with open(os.path.join(TPL, "scripts", script)) as f:
+                tree = ast.parse(f.read())
+            names = {a.name.split(".")[0] for n in ast.walk(tree) if isinstance(n, ast.Import) for a in n.names}
+            names |= {n.module.split(".")[0] for n in ast.walk(tree) if isinstance(n, ast.ImportFrom) and n.module}
+            self.assertLessEqual(names, allowed, script)
 
 
 if __name__ == "__main__":
