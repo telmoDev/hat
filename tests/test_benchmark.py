@@ -180,7 +180,7 @@ class HashCoversTheChecksAndTheSession(unittest.TestCase):
     def test_check_code_and_run_settings(self):
         h = bm.task_hash("B1")
         saved = bm.B1_FUNCTIONS
-        bm.B1_FUNCTIONS = saved | {"catalog.get"}
+        bm.B1_FUNCTIONS = saved | {"catalog.all_products"}
         try:
             self.assertNotEqual(bm.task_hash("B1"), h)
         finally:
