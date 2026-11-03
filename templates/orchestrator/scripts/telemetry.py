@@ -261,7 +261,6 @@ class Store:
                 x("INSERT OR REPLACE INTO criteria VALUES (?, ?, ?, ?, ?, ?, ?)",
                   (cid, task, run, p["criterion_code"], p["status"], p.get("verification_method"), ts))
 
-
     def _number_attempt(self, inv, task):
         """retry_number = earlier invocations of the same agent type on the same task; parent = the last of them."""
         x = self.db.execute
