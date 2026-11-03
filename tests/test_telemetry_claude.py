@@ -172,21 +172,18 @@ class Adapter(unittest.TestCase):
         self.assertEqual((e["payload"]["duration_ms"], e["payload"]["duration_source"]), (48211, "runtime_reported"))
         self.assertFalse(any(k in e["payload"] for k in t.TOKENS))
 
-    def test_subagent_stop_reads_its_transcript(self):
-        d = tempfile.mkdtemp()
-        self.addCleanup(shutil.rmtree, d, True)
-        tp = os.path.join(d, "agent-a1.jsonl")
-        with open(tp, "w") as f:
-            f.write(json.dumps(line("m1")) + "\n")
-        stop = payload("SubagentStop", agent_id="a1", agent_type="api-dev", agent_transcript_path=tp,
+    def test_subagent_stop_defers_its_transcript(self):
+        # Live check on Claude Code 2.1.308: at SubagentStop the transcript may still lack the final request, so the
+        # stop records the agent's end only; the usage is read later (Deferred below).
+        stop = payload("SubagentStop", agent_id="a1", agent_type="api-dev", agent_transcript_path="/x/agent-a1.jsonl",
                        last_assistant_message="SECRET")
-        done, use = self.events(stop)
+        [done] = self.events(stop)
         self.assertEqual(done["event_type"], "agent.completed")
-        self.assertEqual((use["event_type"], use["payload"]["source"], use["payload"]["input_tokens"],
-                          use["payload"]["parser_version"]), ("usage.reported", "runtime_reported", 3, ct.PARSER_VERSION))
-        self.assertNotIn("SECRET", json.dumps([done, use]))
+        self.assertNotIn("SECRET", json.dumps(done))
         _, off = self.events(stop, TELEMETRY_TRANSCRIPTS="off")
         self.assertEqual((off["payload"]["source"], off["payload"].get("input_tokens")), ("unavailable", None))
+        _, nopath = self.events(payload("SubagentStop", agent_id="a1", agent_type="api-dev"))
+        self.assertEqual(nopath["payload"]["source"], "unavailable")
 
     def test_failed_launch_keeps_category_and_duration_only(self):
         for interrupt, category in ((False, "error"), (True, "interrupt")):
@@ -281,8 +278,7 @@ class Lifecycle(unittest.TestCase):
 
     def feed(self, *payloads):
         for p in payloads:
-            for e in t.claude_events(p, {}, "ws"):
-                self.s.record(e)
+            t.claude_hook(self.s, p, {}, "ws")
         return self.s.db.execute("SELECT invocation_id, task_id, status, retry_number FROM agent_invocations "
                                  "ORDER BY invocation_id").fetchall()
 
@@ -298,10 +294,10 @@ class Lifecycle(unittest.TestCase):
         for status, order in (("async_launched", (0, 2, 1)), ("async_launched", (2, 0, 1)), ("completed", (0, 1, 2)),
                               ("completed", (2, 1, 0))):
             with self.subTest(status=status, order=order):
-                self.s.db.execute("DELETE FROM agent_invocations")
-                self.s.db.execute("DELETE FROM events")
+                for table in ("agent_invocations", "events", "usage_records", "claude_pending"):
+                    self.s.db.execute("DELETE FROM " + table)
                 ev = self.agent(status)
-                rows = self.feed(*(ev[i] for i in order))
+                rows = self.feed(*(ev[i] for i in order), payload("SessionEnd"))
                 self.assertEqual(rows, [("claude:a1", "login#T2", "completed", 0)])
                 self.assertEqual(self.s.db.execute("SELECT count(*) FROM usage_records WHERE source = "
                                                    "'runtime_reported'").fetchone()[0], 1)
@@ -314,6 +310,83 @@ class Lifecycle(unittest.TestCase):
         rows = self.feed(failed, internal, *self.agent("async_launched"))
         self.assertEqual(rows, [("claude:a1", "login#T2", "completed", 0),
                                 ("claude:tool:toolu_0", "login#T2", "failed", 0)])
+
+
+class Deferred(unittest.TestCase):
+    """A subagent's usage is read once its transcript has caught up: by a later hook of the session (2 s after the
+    stop at least), at SessionEnd, or at the next SessionStart for a session that ended without one."""
+
+    def setUp(self):
+        self.dir = tempfile.mkdtemp()
+        self.s = t.Store(os.path.join(self.dir, "t.db"))
+        self.tp = os.path.join(self.dir, "agent-a1.jsonl")
+        with open(self.tp, "w") as f:
+            f.write(json.dumps(line("m1", out=82)) + "\n")  # the final request isn't written yet
+
+    def tearDown(self):
+        self.s.close()
+        shutil.rmtree(self.dir, ignore_errors=True)
+
+    def hook(self, p, at):
+        t.claude_hook(self.s, p, {}, "ws", now="2026-11-03T10:00:%02dZ" % at)
+
+    def stop(self, at, aid="a1", session="s1"):
+        self.hook(payload("SubagentStop", session_id=session, agent_id=aid, agent_type="api-dev",
+                          agent_transcript_path=self.tp), at)
+
+    def finish_transcript(self):
+        with open(self.tp, "a") as f:
+            f.write(json.dumps(line("m2", out=4)) + "\n")
+
+    def usage(self):
+        return self.s.db.execute("SELECT source, output_tokens, requests, reason FROM usage_records").fetchall()
+
+    def pending(self):
+        return self.s.db.execute("SELECT count(*) FROM claude_pending").fetchone()[0]
+
+    def test_session_end_reads_the_caught_up_transcript(self):
+        self.stop(0)
+        self.assertEqual((self.usage(), self.pending()), ([], 1))
+        self.finish_transcript()
+        self.hook(payload("SessionEnd"), 1)
+        self.assertEqual((self.usage(), self.pending()), ([("runtime_reported", 86, 2, None)], 0))
+
+    def test_a_later_hook_reads_it_only_after_two_seconds(self):
+        self.stop(0)
+        self.finish_transcript()
+        self.hook(payload("SubagentStart", agent_id="a2", agent_type="x"), 1)
+        self.assertEqual(self.usage(), [])
+        self.hook(payload("SubagentStart", agent_id="a3", agent_type="x"), 3)
+        self.assertEqual(self.usage(), [("runtime_reported", 86, 2, None)])
+
+    def test_session_end_records_unavailable_when_it_still_cannot_read(self):
+        os.remove(self.tp)
+        self.stop(0)
+        self.hook(payload("SessionEnd"), 1)
+        self.assertEqual(self.usage(), [("unavailable", None, None, "transcript not readable")])
+        self.assertEqual(self.pending(), 0)
+
+    def test_the_next_session_reads_what_a_killed_one_left(self):
+        self.stop(0, session="dead")
+        self.finish_transcript()
+        self.hook(payload("SessionStart", session_id="next", source="startup"), 1)
+        self.assertEqual(self.usage(), [("runtime_reported", 86, 2, None)])
+
+    def test_real_usage_replaces_an_earlier_unavailable(self):
+        self.s.record(t.make_event("usage.reported", "claude:s1", invocation_id="claude:a1", key="unavailable",
+                                   payload={"source": "unavailable", "reason": "x"}))
+        self.stop(0)
+        self.finish_transcript()
+        self.hook(payload("SessionEnd"), 1)
+        self.assertEqual(self.usage(), [("runtime_reported", 86, 2, None)])
+
+    def test_a_continued_agent_is_read_again(self):
+        self.stop(0)
+        self.hook(payload("SessionEnd"), 1)
+        self.finish_transcript()
+        self.stop(5)
+        self.hook(payload("SessionEnd"), 6)
+        self.assertEqual(self.usage(), [("runtime_reported", 86, 2, None)])
 
 
 class HookConfig(unittest.TestCase):
