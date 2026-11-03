@@ -135,6 +135,8 @@ CREATE INDEX invocations_by_run ON agent_invocations (run_id);
 CREATE INDEX invocations_by_task ON agent_invocations (task_id);
 CREATE INDEX usage_by_invocation ON usage_records (invocation_id);
 CREATE INDEX events_by_run ON events (run_id);
+"""), (2, """
+CREATE TABLE claude_pending (invocation_id TEXT PRIMARY KEY, run_id TEXT, transcript_path TEXT, stopped_at TEXT);
 """)]
 
 
@@ -251,6 +253,11 @@ class Store:
         elif kind == "usage.reported":
             # One row per invocation and model: a continued agent reports its new totals, which replace the old.
             uid = "use_" + hashlib.sha256(json.dumps([inv, p.get("model")]).encode()).hexdigest()[:24]
+            real = x("SELECT 1 FROM usage_records WHERE invocation_id = ? AND source <> 'unavailable'", (inv,)).fetchone()
+            if p["source"] == "unavailable" and real:
+                return  # figures already read stay; a later failed read doesn't hide them
+            if p["source"] != "unavailable":
+                x("DELETE FROM usage_records WHERE invocation_id = ? AND source = 'unavailable'", (inv,))
             x("INSERT OR REPLACE INTO usage_records VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
               (uid, inv, run, p.get("model")) + tuple(p.get(k) for k in TOKENS)
               + (p.get("requests"), p["source"], p.get("parser_version"), p.get("reason"), ts))
@@ -299,7 +306,7 @@ def _short(v):
     return v[:MAX_STR] if isinstance(v, str) else None
 
 
-def claude_events(p, env, project):
+def claude_events(p, env, project, now=None):
     kind, sid = p.get("hook_event_name"), p.get("session_id")
     if not isinstance(sid, str) or not sid:
         return []
@@ -309,11 +316,11 @@ def claude_events(p, env, project):
         return v[len("agent-"):] if isinstance(v, str) and v.startswith("agent-") else v
 
     if kind == "SessionStart":
-        return [make_event("run.started", run, payload=_clean({
+        return [make_event("run.started", run, timestamp=now, payload=_clean({
             "runtime": rt, "project_id": project, "source": _short(p.get("source")),
             "orchestrator_version": _short(env.get("TEMPLATE_VERSION"))}))]
     if kind == "SessionEnd":
-        return [make_event("run.completed", run, payload=_clean({"status": "completed",
+        return [make_event("run.completed", run, timestamp=now, payload=_clean({"status": "completed",
                                                                   "reason": _short(p.get("reason"))}))]
     if kind in ("SubagentStart", "SubagentStop"):
         aid = agent_id(p.get("agent_id"))
@@ -324,21 +331,17 @@ def claude_events(p, env, project):
             return []
         inv, base = "claude:" + aid, {"agent_id": aid, "agent_type": _short(p.get("agent_type")), "runtime": rt}
         if kind == "SubagentStart":
-            return [make_event("agent.started", run, invocation_id=inv, payload=_clean(base), key="start")]
-        out = [make_event("agent.completed", run, invocation_id=inv, payload=_clean(base))]
-        import claude_transcript  # next to this file; only SubagentStop needs it
+            return [make_event("agent.started", run, timestamp=now, invocation_id=inv, payload=_clean(base), key="start")]
+        out = [make_event("agent.completed", run, timestamp=now, invocation_id=inv, payload=_clean(base))]
+        # The usage is read later, once the transcript has caught up (claude_hook); unless it can't be read at all.
         if env.get("TELEMETRY_TRANSCRIPTS", "on") == "off":
-            models, reason = None, "transcript reading off"
+            reason = "transcript reading off"
+        elif not isinstance(p.get("agent_transcript_path"), str) or not p["agent_transcript_path"]:
+            reason = "no transcript path"
         else:
-            models, reason = claude_transcript.usage(p.get("agent_transcript_path"))
-        if models is None:
-            out.append(make_event("usage.reported", run, invocation_id=inv, key="unavailable",
-                                  payload={"source": "unavailable", "reason": reason}))
-        else:
-            for model, u in sorted(models.items()):
-                out.append(make_event("usage.reported", run, invocation_id=inv, key="%s@%d" % (model, u["requests"]),
-                                      payload=dict(u, model=model, source="runtime_reported",
-                                                   parser_version=claude_transcript.PARSER_VERSION)))
+            return out
+        out.append(make_event("usage.reported", run, timestamp=now, invocation_id=inv, key="unavailable",
+                              payload={"source": "unavailable", "reason": reason}))
         return out
     if kind in ("PostToolUse", "PostToolUseFailure") and p.get("tool_name") in ("Agent", "Task"):
         ti = p.get("tool_input") if isinstance(p.get("tool_input"), dict) else {}
@@ -351,7 +354,7 @@ def claude_events(p, env, project):
                 return []
             dur = p.get("duration_ms")
             ok_dur = isinstance(dur, int) and not isinstance(dur, bool) and dur >= 0
-            return [make_event("agent.failed", run, task_id=task, invocation_id="claude:tool:" + tid, payload=_clean({
+            return [make_event("agent.failed", run, timestamp=now, task_id=task, invocation_id="claude:tool:" + tid, payload=_clean({
                 "agent_type": atype, "runtime": rt, "status": "failed",
                 "error": "interrupt" if p.get("is_interrupt") is True else "error",
                 "duration_ms": dur if ok_dur else None, "duration_source": "runtime_reported" if ok_dur else None}))]
@@ -365,11 +368,54 @@ def claude_events(p, env, project):
             dur = r.get("totalDurationMs")
             if isinstance(dur, int) and not isinstance(dur, bool) and dur >= 0:
                 base.update(duration_ms=dur, duration_source="runtime_reported")
-            return [make_event("agent.completed", run, task_id=task, invocation_id="claude:" + aid, payload=base,
+            return [make_event("agent.completed", run, timestamp=now, task_id=task, invocation_id="claude:" + aid, payload=base,
                                key="result")]
-        return [make_event("agent.started", run, task_id=task, invocation_id="claude:" + aid, payload=base,
+        return [make_event("agent.started", run, timestamp=now, task_id=task, invocation_id="claude:" + aid, payload=base,
                            key="launch")]
     return []
+
+
+# At SubagentStop the transcript may still lack the subagent's last request (seen live on 2.1.308: written ~0.1 s
+# after the hook), so its usage is read later: by a hook of the same session once the stop is 2 s old, at SessionEnd,
+# or at the next SessionStart for a session that ended without one. Only then may it be recorded unavailable.
+_SETTLE_S = 2
+
+
+def claude_hook(store, p, env, project, now=None):
+    """Record a Claude Code hook's events, then read the pending transcripts that have had time to catch up."""
+    now = utc(now)
+    events = claude_events(p, env, project, now)
+    seen, recorded = len(events), sum(store.record(e) for e in events)
+    run, kind = "claude:%s" % p.get("session_id"), p.get("hook_event_name")
+    tp = p.get("agent_transcript_path")
+    if kind == "SubagentStop" and len(events) == 1 and isinstance(tp, str) and tp:  # no unavailable recorded yet
+        store.db.execute("INSERT OR REPLACE INTO claude_pending VALUES (?, ?, ?, ?)",
+                         (events[0]["invocation_id"], run, tp, now))
+    cutoff = utc(datetime.datetime.strptime(now, "%Y-%m-%dT%H:%M:%S.%fZ").replace(tzinfo=datetime.timezone.utc)
+                 - datetime.timedelta(seconds=_SETTLE_S))
+    rows = store.db.execute(
+        "SELECT invocation_id, run_id, transcript_path FROM claude_pending WHERE "
+        "(run_id = ? AND (? OR stopped_at <= ?)) OR (? AND run_id <> ?)",
+        (run, kind == "SessionEnd", cutoff, kind == "SessionStart", run)).fetchall()
+    import claude_transcript  # next to this file
+    final = kind in ("SessionEnd", "SessionStart")  # last chance for these: unreadable now means unavailable
+    for inv, prun, path in rows:
+        models, reason = claude_transcript.usage(path)
+        if models is None and not final:
+            continue
+        for e in _usage_events(prun, inv, models, reason, claude_transcript.PARSER_VERSION, now):
+            seen, recorded = seen + 1, recorded + store.record(e)
+        store.db.execute("DELETE FROM claude_pending WHERE invocation_id = ?", (inv,))
+    return seen, recorded
+
+
+def _usage_events(run, inv, models, reason, version, now):
+    if models is None:
+        return [make_event("usage.reported", run, invocation_id=inv, key="unavailable", timestamp=now,
+                           payload={"source": "unavailable", "reason": reason})]
+    return [make_event("usage.reported", run, invocation_id=inv, key="%s@%d" % (model, u["requests"]), timestamp=now,
+                       payload=dict(u, model=model, source="runtime_reported", parser_version=version))
+            for model, u in sorted(models.items())]
 
 
 def db_path():
@@ -397,20 +443,22 @@ def _read_events(text):
     return data if isinstance(data, list) else [data]
 
 
-def ingest(command, read_events, path):
-    """Record the events read_events() returns. Any error is noted, never raised."""
-    store, events, recorded = None, [], 0
+def _record_all(store, events):
+    return len(events), sum(store.record(e) for e in events)
+
+
+def ingest(command, work, path):
+    """Open the store and run work(store), which returns (events seen, events recorded). Errors are noted, never raised."""
+    store = None
     try:
-        events = read_events()
         store = Store(path)
-        for e in events:
-            recorded += store.record(e)
-        store.log_ingest(command, len(events), recorded, True)
+        seen, recorded = work(store)
+        store.log_ingest(command, seen, recorded, True)
     except Exception as err:
         _note_error(path, command, err)
         if store is not None:
             try:
-                store.log_ingest(command, len(events), recorded, False, type(err).__name__)
+                store.log_ingest(command, 0, 0, False, type(err).__name__)
             except Exception:
                 pass
     finally:
@@ -430,10 +478,11 @@ def main(argv):
             return 0
     text = sys.stdin.read()
     if argv[1] == "ingest":
-        ingest("ingest", lambda: _read_events(text), path)
+        ingest("ingest", lambda store: _record_all(store, _read_events(text)), path)
     else:
         root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        ingest("hook claude", lambda: claude_events(json.loads(text), os.environ, os.path.basename(root)), path)
+        ingest("hook claude", lambda store: claude_hook(store, json.loads(text), os.environ, os.path.basename(root)),
+               path)
     return 0
 
 

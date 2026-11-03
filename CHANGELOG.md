@@ -39,7 +39,12 @@ into the new version's section.
     the error text; it never counts as an attempt at its task.
   - Briefs name their task on the first line (`Task: odd/tasks/<feature>.md › T<n> …` or `Task: <feature>-<n> ·`);
     words after `T<n>` (`T2 review`) are allowed. Only that line is read; the prompt is never stored.
-  - Tokens come from the subagent's transcript when it stops (`claude_transcript.py`): no documented hook gives
+  - The transcript is read after the stop, not at it: checked live, at SubagentStop it may still lack the
+    subagent's last request (written ~0.1 s later), which recorded 1 of 2 requests as if complete. A stopped
+    agent's transcript is read by a later hook of the session once the stop is 2 s old, at SessionEnd, or at the
+    next SessionStart for a session that ended without one (migration 2: `claude_pending`); only then may it be
+    `unavailable`. Real figures replace an earlier `unavailable`, never the reverse.
+  - Tokens come from the subagent's transcript once it has stopped (`claude_transcript.py`): no documented hook gives
     them, since the Agent result's usage covers only its last request and a background agent's result none. The
     format is private, so the reader is strict and versioned (`claude-transcript/2`): anything it doesn't
     recognize records `unavailable`, never a partial sum. Each request spans several lines with the same figures
