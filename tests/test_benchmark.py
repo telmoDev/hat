@@ -92,8 +92,11 @@ class Checks(unittest.TestCase):
             f.write(right.replace('"B": 1500', '"B": 2000').replace('"coupon_applied_times": 2',
                                                                      '"coupon_applied_times": 1'))
         self.assertEqual(self.statuses("B1"), {"O1": "passed", "O2": "failed", "O3": "failed", "O4": "passed"})
-        with open(path, "w") as f:
-            f.write(right.replace('"pricing.bulk_discount",', '"pricing.bulk_discount", "catalog.get",'))
+        with open(path, "w") as f:  # a function the total never calls
+            f.write(right.replace('"pricing.bulk_discount",', '"pricing.bulk_discount", "catalog.all_products",'))
+        self.assertEqual(self.statuses("B1")["O1"], "failed")
+        with open(path, "w") as f:  # one it calls left out
+            f.write(right.replace('"catalog.get", ', ''))
         self.assertEqual(self.statuses("B1")["O1"], "failed")
         with open(os.path.join(self.ws, "api", "shop", "pricing.py"), "a") as f:
             f.write("\n# touched\n")
@@ -146,6 +149,15 @@ class Checks(unittest.TestCase):
                                  'return "$%d.%02d" % (cents // 100, cents % 100) if cents < 100000 else "$big"'))
         s = self.statuses("B5")
         self.assertEqual((s["O2"], s["O3"]), ("failed", "passed"))
+
+
+class B1Functions(unittest.TestCase):
+    def test_the_expected_functions_are_every_one_cart_total_calls(self):
+        # Seen in the pilot: both flows also named Cart.quantity (the bulk discount's quantity) and catalog.get
+        # (inside Cart.subtotal), and they were right.
+        self.assertEqual(bm.B1_FUNCTIONS, {"cart.Cart.total", "cart.Cart.subtotal", "cart.Cart.quantity",
+                                           "catalog.get", "pricing.apply_discounts", "pricing.bulk_discount",
+                                           "pricing.coupon_discount"})
 
 
 class Hash(unittest.TestCase):
@@ -275,12 +287,23 @@ class Result(unittest.TestCase):
         ev("run.completed", "10:00", status="completed")
         s.close()
         path = bm.write_result(ws, "test-label", os.path.join(tmp, "results"))
+        saved = bm.B1_FUNCTIONS
+        bm.CHECK_CODE["B3"] = bm.CHECK_CODE["B3"] + ("_check_b1",)  # the grading code changed after prepare
+        try:
+            regraded = bm.write_result(ws, "test-label", os.path.join(tmp, "results"))
+        finally:
+            bm.CHECK_CODE["B3"] = bm.CHECK_CODE["B3"][:-1]
+            bm.B1_FUNCTIONS = saved
+        with open(regraded, encoding="utf-8") as f:
+            again = json.load(f)
+        self.assertNotEqual(again["task_hash"], again["regraded_from"])
         elapsed = time.perf_counter() - start
         with open(path, encoding="utf-8") as f:
             text = f.read()
         r = json.loads(text)
         self.assertEqual((r["task"], r["flow"], r["label"], r["runtime"]), ("B3", "current", "test-label", "claude-code"))
         self.assertEqual(r["task_hash"], bm.task_hash("B3"))
+        self.assertNotIn("regraded_from", r)
         self.assertEqual((r["criteria_passed"], r["criteria_total"]), (4, 4))
         self.assertEqual(r["tests"]["failed"], 0)
         tel = r["telemetry"]
