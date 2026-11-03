@@ -551,6 +551,8 @@ def _print_report(argv):
     elif argv[1] == "report":
         p.add_argument("run", nargs="?", default="last")
     args = p.parse_args(argv[2:])
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")  # the reports use "—" and "·"; Windows pipes default to cp1252
     here = os.path.dirname(os.path.abspath(__file__))
     rates = os.environ.get("ORCH_RATES") or os.path.join(os.path.dirname(here), "rates.json")
     path = db_path()

@@ -19,6 +19,7 @@ ORCH_UPDATE_FAIL_AT=<path> makes the step writing that path fail (tests only).
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 
@@ -33,7 +34,8 @@ class Refuse(Exception):
 
 
 def git(*args, cwd=HERE):
-    return subprocess.run(["git"] + list(args), cwd=cwd, capture_output=True, text=True)
+    # UTF-8 explicitly: the templates hold non-ASCII text, and Windows would decode with its locale code page.
+    return subprocess.run(["git"] + list(args), cwd=cwd, capture_output=True, encoding="utf-8", errors="replace")
 
 
 def read(path):
@@ -233,8 +235,9 @@ def execute(root, ops):
             if fail_at and op["rel"] == fail_at:
                 raise OSError("simulated failure (ORCH_UPDATE_FAIL_AT)")
             if op["action"] == "run":
-                r = subprocess.run(["bash", ".orchestrator/scripts/sync-skills.sh"], cwd=root, capture_output=True,
-                                   text=True)
+                # The bash on PATH: on Windows a bare "bash" can resolve to WSL's in System32 before Git Bash.
+                r = subprocess.run([shutil.which("bash") or "bash", ".orchestrator/scripts/sync-skills.sh"], cwd=root,
+                                   capture_output=True, encoding="utf-8", errors="replace")
                 if r.returncode != 0:
                     raise OSError("sync-skills.sh failed: " + (r.stderr or r.stdout).strip()[:200])
             else:
@@ -266,6 +269,8 @@ def describe(op):
 
 
 def main(argv):
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")  # the CHANGELOG steps aren't ASCII; Windows pipes default to cp1252
     args = argv[1:]
     dry, dev = "--dry-run" in args, "--dev" in args
     rest = [a for a in args if a not in ("--dry-run", "--dev")]
