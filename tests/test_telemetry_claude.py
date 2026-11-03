@@ -389,6 +389,103 @@ class Deferred(unittest.TestCase):
         self.assertEqual(self.usage(), [("runtime_reported", 86, 2, None)])
 
 
+class MainSession(unittest.TestCase):
+    """The orchestrator's own session: claude:<session>:main, read from the session's transcript with the same strict
+    parser. Never a delegation, never counted twice, read only once the session ended, kept pending when unreadable."""
+
+    def setUp(self):
+        self.dir = tempfile.mkdtemp()
+        self.s = t.Store(os.path.join(self.dir, "t.db"))
+        self.main = os.path.join(self.dir, "s1.jsonl")
+        self.write(self.main, line("main1", out=50, inp=7, cread=900, cwrite=40))
+        self.sub = os.path.join(self.dir, "agent-a1.jsonl")
+        self.write(self.sub, line("sub1", out=5, inp=1, cread=10, cwrite=2))
+
+    def tearDown(self):
+        self.s.close()
+        shutil.rmtree(self.dir, ignore_errors=True)
+
+    def write(self, path, *rows, mode="w"):
+        with open(path, mode) as f:
+            for r in rows:
+                f.write(json.dumps(r) + "\n")
+
+    def hook(self, kind, at, session="s1", **kw):
+        p = payload(kind, session_id=session, transcript_path=self.main if session == "s1" else "/nowhere.jsonl", **kw)
+        t.claude_hook(self.s, p, {}, "ws", now="2026-11-03T10:%02d:00Z" % at)
+
+    def usage(self, inv="claude:s1:main"):
+        return self.s.db.execute("SELECT source, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, "
+                                 "requests FROM usage_records WHERE invocation_id = ?", (inv,)).fetchall()
+
+    def test_read_at_session_end_never_a_delegation(self):
+        self.hook("SessionStart", 0, source="startup")
+        self.hook("SessionEnd", 5, reason="other")
+        self.assertEqual(self.usage(), [("runtime_reported", 7, 50, 900, 40, 1)])
+        row = self.s.db.execute("SELECT agent_id, agent_type, status FROM agent_invocations "
+                                "WHERE invocation_id = 'claude:s1:main'").fetchone()
+        self.assertEqual(row, (None, "main", "completed"))
+
+    def test_not_read_while_the_session_runs(self):
+        self.hook("SessionStart", 0, source="startup")
+        self.hook("SubagentStart", 3, agent_id="x", agent_type="api-dev")  # long after the 2 s settle
+        self.assertEqual(self.usage(), [])
+
+    def test_main_and_subagents_are_counted_apart(self):
+        self.hook("SessionStart", 0, source="startup")
+        self.hook("SubagentStop", 1, agent_id="a1", agent_type="api-dev", agent_transcript_path=self.sub)
+        self.hook("SessionEnd", 5)
+        self.assertEqual(self.usage()[0][2], 50)
+        self.assertEqual(self.usage("claude:a1")[0][2], 5)
+        self.assertEqual(self.s.db.execute("SELECT sum(output_tokens) FROM usage_records").fetchone()[0], 55)
+
+    def test_idempotent_and_a_resumed_session_replaces_its_totals(self):
+        self.hook("SessionStart", 0, source="startup")
+        self.hook("SessionEnd", 5)
+        self.hook("SessionEnd", 5)
+        self.assertEqual(len(self.usage()), 1)
+        self.write(self.main, line("main2", out=8, inp=1, cread=100, cwrite=0), mode="a")
+        self.hook("SessionStart", 10, source="resume")
+        self.hook("SessionEnd", 15)
+        self.assertEqual(self.usage(), [("runtime_reported", 8, 58, 1000, 40, 2)])
+
+    def test_unreadable_at_session_end_stays_pending_for_recovery(self):
+        os.rename(self.main, self.main + ".moved")
+        self.hook("SessionStart", 0, source="startup")
+        self.hook("SessionEnd", 5)
+        self.assertEqual(self.usage(), [])
+        pend = self.s.db.execute("SELECT invocation_id FROM claude_pending").fetchall()
+        self.assertEqual(pend, [("claude:s1:main",)])
+        os.rename(self.main + ".moved", self.main)
+        self.hook("SessionStart", 20, session="s2", source="startup")  # the next session recovers it
+        self.assertEqual(self.usage()[0][0], "runtime_reported")
+
+    def test_still_unreadable_at_the_next_session_is_unavailable(self):
+        os.remove(self.main)
+        self.hook("SessionStart", 0, source="startup")
+        self.hook("SessionEnd", 5)
+        self.hook("SessionStart", 20, session="s2", source="startup")
+        self.assertEqual(self.usage(), [("unavailable", None, None, None, None, None)])
+
+    def test_a_killed_session_is_recovered_by_the_next(self):
+        self.hook("SessionStart", 0, source="startup")  # no SessionEnd
+        self.hook("SessionStart", 20, session="s2", source="startup")
+        self.assertEqual(self.usage()[0][2], 50)
+
+    def test_transcripts_off_records_nothing_for_main(self):
+        p = payload("SessionStart", session_id="s1", transcript_path=self.main, source="startup")
+        t.claude_hook(self.s, p, {"TELEMETRY_TRANSCRIPTS": "off"}, "ws", now="2026-11-03T10:00:00Z")
+        t.claude_hook(self.s, payload("SessionEnd", session_id="s1", transcript_path=self.main),
+                      {"TELEMETRY_TRANSCRIPTS": "off"}, "ws", now="2026-11-03T10:05:00Z")
+        self.assertEqual(self.usage()[0][0], "unavailable")
+
+    def test_privacy(self):
+        self.hook("SessionStart", 0, source="startup")
+        self.hook("SessionEnd", 5)
+        dump = json.dumps(self.s.db.execute("SELECT payload_json FROM events").fetchall())
+        self.assertNotIn("SECRET", dump)
+
+
 class HookConfig(unittest.TestCase):
     """claude -p kills async hooks still running at teardown (hooks reference, "async hooks"), so every telemetry hook
     whose event can come last is synchronous, with a timeout short enough not to hold the session's exit."""

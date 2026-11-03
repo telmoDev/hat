@@ -193,6 +193,34 @@ class RunsWithoutAgents(Base):
         self.assertIn("| claude-code | 1 | — | 0 |", out)  # still open: no wall time yet
 
 
+class MainSessionInReports(Base):
+    """The orchestrator's own session shows apart: never a delegation, never in agent coverage."""
+
+    def setUp(self):
+        super().setUp()
+        rec = lambda kind, at, **p: self.s.record(t.make_event(kind, "claude:r1", invocation_id="claude:r1:main",
+                                                               timestamp="2026-11-03T%sZ" % at, key=kind, payload=p))
+        rec("agent.started", "10:00:00", agent_type="main", runtime="claude-code")
+        rec("agent.completed", "10:10:00", agent_type="main", runtime="claude-code")
+        rec("usage.reported", "10:10:00", source="runtime_reported", model=SONNET, input_tokens=5, output_tokens=50,
+            cache_read_tokens=500, cache_write_tokens=20, requests=3)
+
+    def test_usage_has_a_main_row(self):
+        self.assertIn("| main | 1 | 1/1 | 5 | 50 | 500 | 20 | 575 |", rp.usage(self.s.db, {}, "agent"))
+
+    def test_metrics_keep_delegations_as_they_were_and_show_the_main_session(self):
+        out = rp.metrics(self.s.db, {}, "runtime", self.norates)
+        self.assertIn("| claude-code | 2 | 600.0 s | 5 | 1 | 1 | 1 | 3/3 (100%) | 0 | 1 | 120.0 s | 420.0 s |", out)
+        self.assertIn("| Runtime | Sessions | Main usage | Input | Output | Cache read | Cache write | Total |", out)
+        self.assertIn("| claude-code | 2 | 1/2 | 5 | 50 | 500 | 20 | 575 |", out)
+
+    def test_the_run_report_shows_the_main_session_apart(self):
+        out = rp.report(self.s.db, "claude:r1", self.norates)
+        self.assertIn("| main | main | — | %s | completed |" % SONNET, out)
+        self.assertIn("Coverage 2/3", out)  # agent runs only
+        self.assertIn("Main session tokens 575 · agent runs tokens 3,480", out)
+
+
 class RunReport(Base):
     def test_one_run(self):
         out = rp.report(self.s.db, "claude:r1", self.norates)

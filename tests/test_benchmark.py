@@ -272,6 +272,10 @@ class Result(unittest.TestCase):
             ev("agent.completed", end_at, "claude:" + aid)
             ev("usage.reported", end_at, "claude:" + aid, key="u", source="runtime_reported", model="claude-sonnet-5-5",
                input_tokens=tokens, output_tokens=10, cache_read_tokens=1000, cache_write_tokens=50)
+        ev("agent.started", "00:00", "claude:s1:main", agent_type="main", runtime="claude-code", key="m0")
+        ev("agent.completed", "10:00", "claude:s1:main", agent_type="main", runtime="claude-code", key="m1")
+        ev("usage.reported", "10:00", "claude:s1:main", key="mu", source="runtime_reported", model="claude-haiku-5-5",
+           input_tokens=9, output_tokens=90, cache_read_tokens=900, cache_write_tokens=9)
         ev("run.completed", "10:00", status="completed")
         s.close()
         path = bm.write_result(ws, "test-label", os.path.join(tmp, "results"))
@@ -288,12 +292,34 @@ class Result(unittest.TestCase):
         self.assertEqual((tel["delegations"], tel["agents"], tel["coverage"]), (2, {"api-dev": 2}, [2, 2]))
         self.assertEqual(tel["tokens"], {"input": 300, "output": 20, "cache_read": 2000, "cache_write": 100,
                                          "total": 2420})
+        self.assertEqual(tel["main_tokens"], {"input": 9, "output": 90, "cache_read": 900, "cache_write": 9,
+                                              "total": 1008})
+        self.assertEqual(tel["total_tokens"], {"input": 309, "output": 110, "cache_read": 2900, "cache_write": 109,
+                                               "total": 3428})
         self.assertEqual(r["models"], {"main": "unavailable", "agents": ["claude-sonnet-5-5"]})
         self.assertEqual(r["files_consulted"], "unavailable")
         for secret in (tmp, os.path.expanduser("~"), "Cart totals are wrong", "def total", "SAVE5"):
             self.assertNotIn(secret, text)
         print("\nbenchmark T10 harness: prepare + check + result %.1f s" % elapsed)
         self.assertLess(elapsed, 10)
+
+
+class NoDelegations(unittest.TestCase):
+    def test_a_session_without_agents_has_zero_agent_tokens_and_its_main_tokens(self):
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp, True)
+        os.makedirs(os.path.join(tmp, ".orchestrator", "telemetry"))
+        s = t.Store(os.path.join(tmp, ".orchestrator", "telemetry", "telemetry.db"))
+        for kind, p in (("agent.started", {"agent_type": "main", "runtime": "claude-code"}),
+                        ("agent.completed", {"agent_type": "main", "runtime": "claude-code"}),
+                        ("usage.reported", {"source": "runtime_reported", "model": "m", "input_tokens": 1,
+                                            "output_tokens": 2, "cache_read_tokens": 3, "cache_write_tokens": 4})):
+            s.record(t.make_event(kind, "claude:s1", invocation_id="claude:s1:main", key=kind, payload=p))
+        s.close()
+        tel = bm._telemetry(tmp)
+        self.assertEqual((tel["delegations"], tel["coverage"]), (0, [0, 0]))
+        self.assertEqual(tel["tokens"]["total"], 0)  # no agent ran: zero, not unknown
+        self.assertEqual(tel["total_tokens"]["total"], 10)
 
 
 def result(label, flow, tokens, passed=4, total=4, task="B3", task_hash="h3", main="m", agents=("a",),
@@ -305,7 +331,9 @@ def result(label, flow, tokens, passed=4, total=4, task="B3", task_hash="h3", ma
             "tests": {"passed": 5, "failed": 0},
             "telemetry": {"wall_ms": 60000, "agent_ms_cumulative": 90000, "delegations": 2, "retries": 0,
                           "reinvocations": 0, "coverage": list(coverage),
-                          "tokens": None if coverage[0] < coverage[1] else {"total": tokens}},
+                          "tokens": None if coverage[0] < coverage[1] else {"total": tokens},
+                          "main_tokens": {"total": 0}, "total_tokens": None if coverage[0] < coverage[1] else {
+                              "input": 1, "output": 2, "cache_read": 3, "cache_write": tokens - 6, "total": tokens}},
             "files_consulted": "unavailable"}
 
 
@@ -332,6 +360,13 @@ class Compare(unittest.TestCase):
         self.assertIn("| B3 | 3 | 3 | 4/4 | 4/4 |", out)
         self.assertIn("| B3 | 1,100 (1,000–1,200) | 800 (700–900) | 60.0 s | 60.0 s | 90.0 s | 90.0 s |", out)
         self.assertIn("B used fewer tokens than A in every run", out)
+
+    def test_tokens_by_kind_main_and_agents_apart(self):
+        out = br.compare(*self.dirs([result("A", "v0.7.0", n) for n in (1000, 1100, 1200)],
+                                    [result("B", "current", n) for n in (700, 800, 900)]))
+        self.assertIn("## Tokens by kind (median)", out)
+        self.assertIn("| B3 | A | 0 | 1,100 | 1 | 2 | 3 | 1,094 | 2/2 |", out)
+        self.assertIn("| B3 | B | 0 | 800 | 1 | 2 | 3 | 794 | 2/2 |", out)
 
     def test_a_quality_regression_is_never_an_efficiency_gain(self):
         a = [result("A", "v0.7.0", n) for n in (1000, 1100, 1200)]
