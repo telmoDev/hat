@@ -113,12 +113,15 @@ class Adapter(unittest.TestCase):
         return t.claude_events(p, dict(self.env, **env), "ws")
 
     def test_session_start_and_end(self):
-        [start] = self.events(payload("SessionStart", source="resume", model="claude-opus-5-5"))
+        start, main = self.events(payload("SessionStart", source="resume", model="claude-opus-5-5"))
         self.assertEqual((start["event_type"], start["run_id"]), ("run.started", "claude:s1"))
         self.assertEqual(start["payload"], {"runtime": "claude-code", "project_id": "ws", "source": "resume",
                                             "orchestrator_version": "0.8.0"})
-        [end] = self.events(payload("SessionEnd", reason="other"))
+        self.assertEqual((main["event_type"], main["invocation_id"], main["payload"]),
+                         ("agent.started", "claude:s1:main", {"agent_type": "main", "runtime": "claude-code"}))
+        end, main_end = self.events(payload("SessionEnd", reason="other"))
         self.assertEqual((end["event_type"], end["payload"]["status"]), ("run.completed", "completed"))
+        self.assertEqual((main_end["event_type"], main_end["invocation_id"]), ("agent.completed", "claude:s1:main"))
 
     def test_subagent_start(self):
         [e] = self.events(payload("SubagentStart", agent_id="agent-a1", agent_type="api-dev"))
