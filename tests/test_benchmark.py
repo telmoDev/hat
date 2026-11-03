@@ -61,6 +61,25 @@ class Fixture(unittest.TestCase):
                            cwd=os.path.join(BENCH, "fixture", "api"), capture_output=True, timeout=120)
         self.assertEqual(p.returncode, 0, p.stderr)
 
+    def test_the_server_does_no_name_lookup(self):
+        # http.server's HTTPServer resolves the host name on every start: ~35 s each on the macOS CI runner.
+        code = ("import socket, sys\n"
+                "def no(*a, **k): raise AssertionError('name lookup')\n"
+                "socket.getfqdn = no\n"
+                "sys.path.insert(0, sys.argv[1])\n"
+                "import server\n"
+                "s = server.make_server(); s.server_close(); print('ok')")
+        for where in ("fixture/api", "solutions/B2/api", "solutions/B5/api"):
+            with self.subTest(where):
+                d = tempfile.mkdtemp()
+                self.addCleanup(shutil.rmtree, d, True)
+                shutil.copytree(os.path.join(BENCH, "fixture", "api"), os.path.join(d, "api"))
+                if where != "fixture/api":
+                    shutil.copy(os.path.join(BENCH, where, "server.py"), os.path.join(d, "api", "server.py"))
+                p = subprocess.run([sys.executable, "-c", code, os.path.join(d, "api")], capture_output=True,
+                                   timeout=60)
+                self.assertEqual(p.stdout.strip(), b"ok", p.stderr)
+
     @unittest.skipUnless(NODE, "Node not installed")
     def test_web_tests_pass(self):
         p = subprocess.run([NODE, "--test"], cwd=os.path.join(BENCH, "fixture", "web"), capture_output=True,
