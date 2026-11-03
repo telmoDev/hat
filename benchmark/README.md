@@ -10,7 +10,7 @@ pilot before deciding how many runs to make.
 
   | Task | Kind | Checked by |
   |---|---|---|
-  | B1 | explore how a cart total is computed | the answer's JSON facts against the code: functions, three totals, how often the coupon comes off |
+  | B1 | explore how a cart total is computed | the answer's JSON facts against the code: every function the total calls, three totals, how often the coupon comes off |
   | B2 | add `GET /products/<id>` | hidden tests, and the repo's tests |
   | B3 | fix the coupon applied twice | hidden tests, and the repo's tests |
   | B4 | a cart badge on the page | hidden `node` tests, the page's header, and the repo's tests (`blocked` without Node) |
@@ -34,7 +34,8 @@ the same measurement layer in both: the current telemetry scripts and hooks. Onl
 `run` gives the session the task's request on stdin (`claude -p`, edits accepted, only python, node and git allowed;
 no push), and saves its final answer to `.bench/answer.md`. A session can also be run by hand in the workspace (for
 B1, save the answer there), but it has no named model, so its result is never compared. `result` runs the checks on a copy of the workspace, reads its telemetry and writes the
-result JSON. Files consulted are recorded as `unavailable`: no hook reports them.
+result JSON, with the task hash it is graded under; if the grading changed since `prepare`, the earlier hash is kept
+as `regraded_from`. Files consulted are recorded as `unavailable`: no hook reports them.
 
 ## Comparing
 
