@@ -16,6 +16,11 @@ into the new version's section.
   task's hash: earlier results (the B1 pilots) stay as they are and don't compare with new runs.
 - `tests/smoke.sh` lists the 20 slowest tests (`unittest --durations`, Python 3.12+).
 
+- `telemetry.py benchmark`: with fewer than 3 runs on a side, no reading at all (no "fewer/more tokens in every
+  run", no quality verdict): only n, medians and ranges, quality, coverage and the warning. Seen in pilot 2, where
+  one run a side read as a result. Pilot 2's results (B1, Haiku, once per flow; main session measured) are
+  versioned in `benchmark/results/pilot2-b1-*/`; earlier ones are unchanged.
+
 - Telemetry measures the main (orchestrator) session too, not only the agent runs: `claude:<session>:main`, read
   from the session's own transcript with the same strict parser (`unavailable` on any shape it doesn't know; never
   prompts, answers or code). Queued at SessionStart and read only at SessionEnd, never while the session grows;
