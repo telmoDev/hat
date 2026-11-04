@@ -11,6 +11,11 @@ into the new version's section.
 
 ## Unreleased
 
+- Benchmark fixture: its HTTP server no longer looks the host name up on every start (`http.server` does, and on
+  the macOS CI runner each lookup took ~35 s, measured: the job went from ~40 s to ~11 min). This changes every
+  task's hash: earlier results (the B1 pilots) stay as they are and don't compare with new runs.
+- `tests/smoke.sh` lists the 20 slowest tests (`unittest --durations`, Python 3.12+).
+
 - Telemetry measures the main (orchestrator) session too, not only the agent runs: `claude:<session>:main`, read
   from the session's own transcript with the same strict parser (`unavailable` on any shape it doesn't know; never
   prompts, answers or code). Queued at SessionStart and read only at SessionEnd, never while the session grows;
