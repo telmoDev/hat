@@ -11,6 +11,11 @@ into the new version's section.
 
 ## Unreleased
 
+- Benchmark fixture: its HTTP server no longer looks the host name up on every start (`http.server` does, and on
+  the macOS CI runner each lookup took ~35 s, measured: the job went from ~40 s to ~11 min). This changes every
+  task's hash: earlier results (the B1 pilots) stay as they are and don't compare with new runs.
+- `tests/smoke.sh` lists the 20 slowest tests (`unittest --durations`, Python 3.12+).
+
 - `telemetry.py benchmark`: with fewer than 3 runs on a side, no reading at all (no "fewer/more tokens in every
   run", no quality verdict): only n, medians and ranges, quality, coverage and the warning. Seen in pilot 2, where
   one run a side read as a result. Pilot 2's results (B1, Haiku, once per flow; main session measured) are

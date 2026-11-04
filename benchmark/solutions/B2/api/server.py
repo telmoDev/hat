@@ -1,6 +1,7 @@
 """The shop's HTTP API: GET /products."""
 import json
 from http.server import BaseHTTPRequestHandler, HTTPServer
+from socketserver import TCPServer
 
 from shop import catalog
 
@@ -33,8 +34,15 @@ class Handler(BaseHTTPRequestHandler):
         pass
 
 
+class Server(HTTPServer):
+    def server_bind(self):
+        # HTTPServer looks the host name up on every start, which a local server doesn't need.
+        TCPServer.server_bind(self)
+        self.server_name, self.server_port = self.server_address[:2]
+
+
 def make_server(port=0):
-    return HTTPServer(("127.0.0.1", port), Handler)
+    return Server(("127.0.0.1", port), Handler)
 
 
 if __name__ == "__main__":
