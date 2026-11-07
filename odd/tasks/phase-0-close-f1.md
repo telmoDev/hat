@@ -1,7 +1,7 @@
 # phase-0-close-f1
 
-Status: active · Next: T5 release v0.8.0 (needs D9 and the workspace pick) and the real-session check of T2
-Ticket: — · Repos: hat · PRs: hat #22 #23 #24 #25 merged · #26 open (README, X3) · phase-1 review open
+Status: active · Next: T5 waits: the user postponed the real-workspace test (2026-11-06)
+Ticket: — · Repos: hat · PRs: hat #22 #23 #24 #25 #26 merged · phase-1 review open
 
 ## Request
 > tambien hay que implementar memoria entre sessions
@@ -59,3 +59,5 @@ Assumptions · risks · depends on: D1 and D9 before T5 (R4); the workspace for 
 - 2026-11-06 Push authorized by the user for R1 (#23) and the wording PR (#24).
 - 2026-11-06 S1 keeps its state in `.orchestrator/tmp/handoff/` (already git-ignored) instead of `.orchestrator/state/`, so no `.gitignore` change is needed. The user asked for the README to say what the meta-harness does and how to install it: own PR after S1.
 - 2026-11-06 X3 (rename follow-through) done in PR #26 with D1 assumed as recommended: URLs and product name only.
+- 2026-11-06 D9 decided by the user: docs in English ("idioma ingles").
+- 2026-11-06 The user postponed T5's real-workspace test ("aun no probemos"); T2's real-session check waits with it.
