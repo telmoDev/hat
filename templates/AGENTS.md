@@ -63,7 +63,10 @@ Agents are defined twice from one source, once per tool (`.claude/agents/*.md`, 
 {{DEV_ROWS}}
 Launch every subagent with medium reasoning effort and the model of its tier (*Token budget* › *Model tiers*). Raise the effort only for a hard bug or a risky plan. The agent definitions stay unchanged.
 
-The flow is **Organic Driven Development (ODD)**, the same in both tools: the process grows only as far as the request needs. A question gets an answer, a small change goes straight through, and only substantial work gets a task file. Within it, work is **outcome-driven**: a task is done when its outcome is verified, not when code exists.
+The flow is **Organic Driven Development (ODD)**, the same in both tools, and it works together with **Outcome-Driven Development**: each answers a different question.
+
+- **Organic: how much process.** The process grows only as far as the request needs: a question gets an answer, a small change goes straight through, and only substantial work gets a task file.
+- **Outcome-driven: when it is done.** Every change starts from its outcome and criteria (step 1) and is done when the orchestrator has verified them (step 4), not when code exists. Organic scales this too: one criterion for a trivial task, the outcome in the brief and the PR body for a small one, the task file with its evidence for a large one.
 
 **Ask or change.** First decide what the request authorizes. An explanation, an investigation or a proposal is answered from reading: no edits, no branch, no task file, no memory entry. Only a request to make a change starts the steps below. When it is unclear which one it is, propose and ask.
 
