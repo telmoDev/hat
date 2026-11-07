@@ -256,8 +256,8 @@ once shipped.
 | D9 | Docs language | Phase 0 | English (repo convention), summaries in Spanish |
 | D5 | Global location | Phase 2 | `~/.hat/`, opt-in, read-only on projects |
 | D2 | llm-wiki has no licence | Phase 3 | native provider; ask the author; optional provider if licensed |
-| D3 | OKF version | Phase 3 | v0.2, pinned per bundle; read v0.1 with fallbacks (applied in K1 as recommended; to confirm) |
-| D4 | YAML parsing | Phase 3 | stdlib subset; PyYAML when present (applied in K1 as recommended; to confirm) |
+| D3 | OKF version | Phase 3 | v0.2, pinned per bundle; read v0.1 with fallbacks (confirmed 2026-11-06, applied in K1) |
+| D4 | YAML parsing | Phase 3 | stdlib subset; PyYAML when present (confirmed 2026-11-06, applied in K1) |
 | D7 | Which phase-5 track first, and whether F2 is built | Phase 5 | from the baseline: F2 only if exploration ≥ ~20 % of tokens |
 | D6 | Install Codex | Phase 4 (G2) or 7 | when Codex matters for real work |
 | D8 | Headless dispatch | Phase 7 | opt-in per task, after governance |
