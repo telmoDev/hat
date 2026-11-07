@@ -21,6 +21,10 @@ into the new version's section.
   that looks like a secret is left out (`memory-check.py`'s rule). State in `.orchestrator/tmp/handoff/`;
   `SESSION_HANDOFF="off"` turns it off. `scripts/update.py` adds its Claude Code hooks.
 
+- `AGENTS.md`: Organic Driven Development and Outcome-Driven Development spelled out as complementary, one
+  answering how much process a request needs, the other when it is done (its criteria verified). Same rules as
+  before, clearer wording.
+
 - `docs/telemetry.md`: the telemetry contract in one place (events and their keys, statuses, figures and their
   sources, the Claude Code adapter, recovery, the store, settings) and the F1 criteria with the tests that prove
   each. `tests/test_telemetry_doc.py` fails when the document and the code disagree. Templates unchanged.
@@ -178,10 +182,11 @@ into the new version's section.
 **Workspaces:** run `bash <skill>/scripts/update.sh <workspace-root>` (`--dry-run` first to see the plan) and
   merge any `.new` it lists. Then by hand: in `AGENTS.md`, replace the *Run log* bullet and the *Tool mapping*
   row on run-log figures with the template's; in `odd/README.md`, the "Figures are…" rule and the *Run log* line;
-  in `memory/PROGRESS.md`, the `Cost:` line with `Attempts:`; in *Session memory*, the sentence on the session
-  handoff after "…and it stays short.", and the *Tool mapping* row "Session handoff". With Codex, add the
-  template's `session-handoff.sh start` entry to `.codex/hooks.json` › SessionStart. Restart the sessions so the
-  hooks load.
+  in `memory/PROGRESS.md`, the `Cost:` line with `Attempts:`; in *Orchestrator role*, the paragraph that opens
+  the flow ("The flow is **Organic Driven Development (ODD)**…") with the template's; in *Session memory*, the
+  sentence on the session handoff after "…and it stays short.", and the *Tool mapping* row "Session handoff".
+  With Codex, add the template's `session-handoff.sh start` entry to `.codex/hooks.json` › SessionStart.
+  Restart the sessions so the hooks load.
 
 ## v0.7.0 — 2026-10-27
 
