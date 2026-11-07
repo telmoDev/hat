@@ -96,7 +96,9 @@ def validate(e):
         raise ValueError("payload is not an object")
     for k, v in p.items():
         if k not in allowed:
-            raise ValueError("payload key %r is not in the contract for %s" % (k, kind))
+            # A key is named only when it looks like one: free text in a key never reaches errors.log.
+            name = "payload key %r" % k if re.fullmatch(r"[A-Za-z_]\w{0,39}", str(k)) else "an unknown payload key"
+            raise ValueError("%s is not in the contract for %s" % (name, kind))
         if isinstance(v, str) and len(v) > MAX_STR:
             raise ValueError("payload key %r is longer than %d characters" % (k, MAX_STR))
         if v is not None and not isinstance(v, (str, int, float, bool)):

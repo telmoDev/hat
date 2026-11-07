@@ -252,8 +252,8 @@ once shipped.
 
 | # | Decision | Needed by | Recommendation |
 |---|---|---|---|
-| D1 | What the rename to `hat` covers | Phase 0 | URLs + name in prose; keep paths |
-| D9 | Docs language | Phase 0 | English (repo convention), summaries in Spanish |
+| D1 | What the rename to `hat` covers | Phase 0 | applied in #26 as recommended: URLs + name in prose; paths kept |
+| D9 | Docs language | Phase 0 | **decided 2026-11-06: English** |
 | D5 | Global location | Phase 2 | `~/.hat/`, opt-in, read-only on projects |
 | D2 | llm-wiki has no licence | Phase 3 | native provider; ask the author; optional provider if licensed |
 | D3 | OKF version | Phase 3 | v0.2, pinned per bundle; read v0.1 with fallbacks (confirmed 2026-11-06, applied in K1) |

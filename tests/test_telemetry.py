@@ -176,6 +176,15 @@ class HookEntry(unittest.TestCase):
         self.assertEqual(len(log.splitlines()), 2)
         self.assertNotIn('"x"', log)  # the rejected payload is not copied into the log
 
+    def test_an_unknown_key_that_is_not_an_identifier_is_not_logged(self):  # phase 1 review F1
+        self.assertEqual(self.hook(json.dumps(ev("run.started", **{"prompt text here: hunter2": "x"}))), (0, b""))
+        self.assertEqual(self.hook(json.dumps(ev("run.started", colour="x"))), (0, b""))
+        with open(self.errors) as f:
+            log = f.read()
+        self.assertNotIn("hunter2", log)
+        self.assertIn("an unknown payload key", log)
+        self.assertIn("'colour'", log)  # an identifier-like key is still named
+
     def test_a_corrupt_database_does_not_block(self):  # F1-10
         os.makedirs(os.path.dirname(self.db))
         with open(self.db, "wb") as f:
