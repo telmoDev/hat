@@ -11,6 +11,10 @@ into the new version's section.
 
 ## Unreleased
 
+- The repository is now `telmoDev/hat`: the README says what hat does today, where it is going (the meta-harness
+  roadmap) and how to install it; `INSTALL.md` clones from the new URL. The skill (`orchestrator-setup`), the
+  clone folder and the workspace paths keep their names.
+
 - **Session handoff**: memory between sessions no longer depends on the model running `sync-memory`. A session
   that ends without updating `memory/` leaves a short draft of where it stopped, shown once at the next start
   with an offer to reconcile it into `memory/`: per repo the branch, uncommitted files (paths, at most three) and
