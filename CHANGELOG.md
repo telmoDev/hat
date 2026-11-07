@@ -15,6 +15,10 @@ into the new version's section.
   answering how much process a request needs, the other when it is done (its criteria verified). Same rules as
   before, clearer wording.
 
+- `docs/telemetry.md`: the telemetry contract in one place (events and their keys, statuses, figures and their
+  sources, the Claude Code adapter, recovery, the store, settings) and the F1 criteria with the tests that prove
+  each. `tests/test_telemetry_doc.py` fails when the document and the code disagree. Templates unchanged.
+
 - Benchmark fixture: its HTTP server no longer looks the host name up on every start (`http.server` does, and on
   the macOS CI runner each lookup took ~35 s, measured: the job went from ~40 s to ~11 min). This changes every
   task's hash: earlier results (the B1 pilots) stay as they are and don't compare with new runs.
