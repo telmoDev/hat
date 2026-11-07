@@ -1,5 +1,5 @@
 {
-  "description": "Orchestrator: load the session memory and the decision index at start, and say when an update is out (Claude Code does the same from CLAUDE.md and .claude/settings.json).",
+  "description": "Orchestrator: load the session memory and the decision index at start, show the last session's handoff when it didn't sync its memory, and say when an update is out (Claude Code does the same from CLAUDE.md and .claude/settings.json).",
   "hooks": {
     "SessionStart": [
       {
@@ -22,6 +22,12 @@
             "type": "command",
             "command": "bash .orchestrator/hooks/update-check.sh",
             "statusMessage": "Checking for orchestrator updates",
+            "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "bash .orchestrator/hooks/session-handoff.sh start",
+            "statusMessage": "Checking the last session's handoff",
             "timeout": 10
           }
         ]
