@@ -187,6 +187,13 @@ class Validate(Bundle):
         self.assertOneError("flows/checkout.md", "line 12")
         self.assertNotIn("sk-live", " ".join(map(str, self.findings())))
 
+    def test_a_long_url_is_not_a_secret_but_a_token_in_its_query_is(self):  # seen in the OKF sample bundles
+        url = "https://meta.example.invalid/questions/2677/database-schema-documentation-for-the-public-data-dump"
+        self.write("flows/checkout.md", FLOW + "\nFrom [the schema](%s).\n" % url)
+        self.assertEqual(self.errors(), [])
+        self.write("flows/checkout.md", FLOW + "\nSee https://example.invalid/x?token=abcdef123456\n")
+        self.assertOneError("flows/checkout.md", "line 12")
+
     def test_a_footnote_without_its_source(self):
         self.write("decisions/coupons-before-tax.md", DECISION.replace(".[^pr-143]\n", ".[^pr-999]\n"))
         self.assertEqual(self.errors(), [])
@@ -218,6 +225,11 @@ class Parser(unittest.TestCase):
         self.assertEqual(data["verified"][0]["at"], "2026-11-06T11:00:00+01:00")
         self.assertEqual(data["usage_window"]["to"], "2026-10-31T00:00:00Z")
         self.assertEqual(data["owner_note"], "kept: unknown keys are fine")
+
+    def test_folded_plain_scalars(self):  # PyYAML's own dumps wrap long values like this
+        fm = "type: Table\ndescription: All blocks, including headers,\n  counts, sizes, and timestamps.\ntags:\n- a\n"
+        self.assertEqual(k.load_yaml(fm, subset=True), {"type": "Table", "tags": ["a"],
+                         "description": "All blocks, including headers, counts, sizes, and timestamps."})
 
     @unittest.skipUnless(HAVE_YAML, "PyYAML not installed")
     def test_the_subset_agrees_with_pyyaml(self):
