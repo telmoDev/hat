@@ -137,13 +137,22 @@ class Handoff(Workspace):
         text = self.start("s2", at="2026-11-06T12:00:00Z")
         self.assertIsNotNone(text)
         self.assertIn("api: on feat/coupon", text)
-        self.assertIn("ended without its end hook", text)
+        self.assertIn("still open or ended without its end hook", text)
 
     def test_a_killed_session_that_synced_is_not_a_draft(self):  # O3
         self.start("s1")
         self.work_in_api()
         self.write("memory/PROGRESS.md", "# PROGRESS\n\n- checkout T2 half done\n")
         self.assertIsNone(self.start("s2", at="2026-11-06T12:00:00Z"))
+
+    def test_a_parallel_session_that_syncs_is_not_left_a_draft(self):
+        self.start("a")
+        self.work_in_api()
+        self.start("b", at="2026-11-06T10:30:00Z")  # a is still open: b may see a's state, worded as possibly open
+        self.end("b", at="2026-11-06T10:40:00Z")
+        self.write("memory/NEXT_STEPS.md", "# NEXT_STEPS\n\n## Resume\n- checkout T2\n")
+        self.end("a", at="2026-11-06T11:00:00Z")  # a synced before ending
+        self.assertIsNone(self.start("c", at="2026-11-06T12:00:00Z"))
 
     def test_a_resumed_session_keeps_its_first_start(self):
         self.start("s1")
