@@ -99,6 +99,7 @@ class Handoff(Workspace):
     def test_an_unsynced_session_leaves_a_draft_of_where_it_stopped(self):  # O1
         self.start("s1")
         self.work_in_api()
+        self.write("odd/tasks/checkout.md", TASK.replace("| in progress |", "| in progress (coupon wired) |"))
         self.end("s1")
         text = self.start("s2", at="2026-11-06T12:00:00Z")
         self.assertIsNotNone(text)
@@ -109,6 +110,21 @@ class Handoff(Workspace):
         self.assertIn("T2 wire the coupon into the total", text)
         self.assertIn("open: T2, T3", text)
         self.assertIn("sync-memory", text)
+
+    def test_only_the_task_files_this_session_changed(self):  # phase 1 review F2
+        self.write("odd/tasks/billing.md", TASK.replace("# checkout", "# billing"))
+        self.start("s1")
+        self.write("odd/tasks/checkout.md", TASK.replace("| in progress |", "| in progress (coupon wired) |"))
+        self.end("s1")
+        text = self.start("s2", at="2026-11-06T12:00:00Z")
+        self.assertIn("odd/tasks/checkout.md", text)
+        self.assertNotIn("odd/tasks/billing.md", text)
+        self.assertIn("1 other active task file unchanged this session", text)
+
+    def test_unchanged_task_files_alone_are_not_a_draft(self):
+        self.start("s1")
+        self.end("s1")
+        self.assertIsNone(self.start("s2", at="2026-11-06T12:00:00Z"))
 
     def test_shown_once(self):  # O2
         self.start("s1")

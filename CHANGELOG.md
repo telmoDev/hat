@@ -17,6 +17,12 @@ into the new version's section.
   check verified, Codex nothing yet. `doctor` says whether each runtime is installed and wired in the workspace
   (naming any missing hook). No network, no model calls, never starts a session; nothing in the flow uses it yet.
 
+- Phase 1 review ([docs/meta-harness/phase-1-review.md](docs/meta-harness/phase-1-review.md)): hook latency, concurrency,
+  privacy and the update path measured on copies of real workspaces. Two fixes: `errors.log` names an unknown
+  payload key only when it looks like an identifier (free text in a key is never logged), and the session handoff
+  lists only the task files the session changed, counting the other active ones in one line.
+  `docs/telemetry.md` › *Scope*: every metric belongs to its project's store; no global store.
+
 - The repository is now `telmoDev/hat`: the README says what hat does today, where it is going (the meta-harness
   roadmap) and how to install it; `INSTALL.md` clones from the new URL. The skill (`orchestrator-setup`), the
   clone folder and the workspace paths keep their names.
