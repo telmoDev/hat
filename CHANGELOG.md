@@ -11,6 +11,12 @@ into the new version's section.
 
 ## Unreleased
 
+- `harness.py doctor` and [docs/harnesses.md](docs/harnesses.md): the harness capability contract (meta-harness X2).
+  Each runtime declares what it can really do for hat (`health_check`, `collect_events`, `usage`, `execute`,
+  `status`, `cancel`) as `verified`, `unverified` or `unsupported`; Claude Code has events, usage and its health
+  check verified, Codex nothing yet. `doctor` says whether each runtime is installed and wired in the workspace
+  (naming any missing hook). No network, no model calls, never starts a session; nothing in the flow uses it yet.
+
 - The repository is now `telmoDev/hat`: the README says what hat does today, where it is going (the meta-harness
   roadmap) and how to install it; `INSTALL.md` clones from the new URL. The skill (`orchestrator-setup`), the
   clone folder and the workspace paths keep their names.
