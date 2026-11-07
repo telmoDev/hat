@@ -146,6 +146,11 @@ class Update(Workspace):
                       "PostToolUseFailure"):
             commands = [h["command"] for g in hooks[event] for h in g["hooks"]]
             self.assertEqual(sum("telemetry.sh" in c for c in commands), 1, event)
+        for event, verb in (("SessionStart", "start"), ("SessionEnd", "end")):
+            commands = [h["command"] for g in hooks[event] for h in g["hooks"]]
+            self.assertEqual(sum("session-handoff.sh\" " + verb in c for c in commands), 1, event)
+        self.assertIn('SESSION_HANDOFF="on"', self.read(".orchestrator/orchestrator.conf"))
+        self.assertTrue(os.path.isfile(self.path(".orchestrator/scripts/session_handoff.py")))
         self.assertIn(".orchestrator/telemetry/", self.read(".gitignore").splitlines())
         self.commit()
         before = self.snapshot()
