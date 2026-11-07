@@ -11,6 +11,10 @@ into the new version's section.
 
 ## Unreleased
 
+- `AGENTS.md`: Organic Driven Development and Outcome-Driven Development spelled out as complementary, one
+  answering how much process a request needs, the other when it is done (its criteria verified). Same rules as
+  before, clearer wording.
+
 - Benchmark fixture: its HTTP server no longer looks the host name up on every start (`http.server` does, and on
   the macOS CI runner each lookup took ~35 s, measured: the job went from ~40 s to ~11 min). This changes every
   task's hash: earlier results (the B1 pilots) stay as they are and don't compare with new runs.
@@ -164,7 +168,9 @@ into the new version's section.
 **Workspaces:** run `bash <skill>/scripts/update.sh <workspace-root>` (`--dry-run` first to see the plan) and
   merge any `.new` it lists. Then by hand: in `AGENTS.md`, replace the *Run log* bullet and the *Tool mapping*
   row on run-log figures with the template's; in `odd/README.md`, the "Figures are…" rule and the *Run log* line;
-  in `memory/PROGRESS.md`, the `Cost:` line with `Attempts:`. Restart the sessions so the hooks load.
+  in `memory/PROGRESS.md`, the `Cost:` line with `Attempts:`; in *Orchestrator role*, the paragraph that opens
+  the flow ("The flow is **Organic Driven Development (ODD)**…") with the template's. Restart the sessions so
+  the hooks load.
 
 ## v0.7.0 — 2026-10-27
 
