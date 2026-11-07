@@ -1,6 +1,6 @@
 # phase-0-close-f1
 
-Status: active · Next: T2 S1 session handoff
+Status: active · Next: T2 real-session check at T5; T3 R2 decision
 Ticket: — · Repos: hat · PRs: hat #22 open (plan) · #23 open (T1) · #24 open (Organic + Outcome wording)
 
 ## Request
@@ -39,9 +39,12 @@ Assumptions · risks · depends on: D1 and D9 before T5 (R4); the workspace for 
 ## Evidence
 - 2026-11-06 T1 · O1 · `python3 -m unittest tests.test_telemetry_doc` → passed: 6 tests OK (red before the doc; removing one key from the doc fails it)
 - 2026-11-06 T1 · O2 · `python3 -m unittest tests.test_telemetry_doc` → passed: 14 criteria traced (F1-11, F1-14 partial)
+- 2026-11-06 T2 · O3 · `python3 -m unittest tests.test_session_handoff` → passed: 17 tests OK (draft when unsynced, shown once, nothing after a sync, killed and parallel sessions, privacy, hook never fails; end hook 61 ms)
+- 2026-11-06 T2 · O3 · `bash tests/smoke.sh` → passed: 39 checks (update wires the hooks and SESSION_HANDOFF)
 
 ## Run log
-- 2026-11-06 T1 · orchestrator · normal · attempt 1 · PR #23 open · — · —
+- 2026-11-06 T1 · orchestrator · normal · attempt 1 · PR #23 merged · — · —
+- 2026-11-06 T2 · orchestrator · normal · attempt 1 · tests green, PR pending push · a parallel session lost its start record (fixed, test added) · real-session check with T5
 
 ## Decisions and scope changes
 - 2026-11-06 Plan in `docs/meta-harness/roadmap.md` (phases 0–7). The original F1-01…F1-14 texts were found in the
@@ -49,3 +52,4 @@ Assumptions · risks · depends on: D1 and D9 before T5 (R4); the workspace for 
 - 2026-11-06 Push authorized by the user for the plan PR; R1 and S1 get their own PRs.
 - 2026-11-06 The user: Organic and Outcome-Driven Development complement each other; keep both. Wording in PR #24.
 - 2026-11-06 Push authorized by the user for R1 (#23) and the wording PR (#24).
+- 2026-11-06 S1 keeps its state in `.orchestrator/tmp/handoff/` (already git-ignored) instead of `.orchestrator/state/`, so no `.gitignore` change is needed. The user asked for the README to say what the meta-harness does and how to install it: own PR after S1.

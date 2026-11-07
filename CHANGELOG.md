@@ -11,6 +11,16 @@ into the new version's section.
 
 ## Unreleased
 
+- **Session handoff**: memory between sessions no longer depends on the model running `sync-memory`. A session
+  that ends without updating `memory/` leaves a short draft of where it stopped, shown once at the next start
+  with an offer to reconcile it into `memory/`: per repo the branch, uncommitted files (paths, at most three) and
+  commits not in `origin/<base>`; each active task file with its `Next:` and open tasks; agent runs that never
+  finished (from the telemetry store). A session killed without its end hook is caught by the next start; so is
+  every Codex session, which has no end hook yet. Nothing shows after a synced session or when there is nothing
+  to hand off. Local git only, no network or model calls, never file contents, diffs or commit messages; a line
+  that looks like a secret is left out (`memory-check.py`'s rule). State in `.orchestrator/tmp/handoff/`;
+  `SESSION_HANDOFF="off"` turns it off. `scripts/update.py` adds its Claude Code hooks.
+
 - `AGENTS.md`: Organic Driven Development and Outcome-Driven Development spelled out as complementary, one
   answering how much process a request needs, the other when it is done (its criteria verified). Same rules as
   before, clearer wording.
@@ -173,8 +183,10 @@ into the new version's section.
   merge any `.new` it lists. Then by hand: in `AGENTS.md`, replace the *Run log* bullet and the *Tool mapping*
   row on run-log figures with the template's; in `odd/README.md`, the "Figures are…" rule and the *Run log* line;
   in `memory/PROGRESS.md`, the `Cost:` line with `Attempts:`; in *Orchestrator role*, the paragraph that opens
-  the flow ("The flow is **Organic Driven Development (ODD)**…") with the template's. Restart the sessions so
-  the hooks load.
+  the flow ("The flow is **Organic Driven Development (ODD)**…") with the template's; in *Session memory*, the
+  sentence on the session handoff after "…and it stays short.", and the *Tool mapping* row "Session handoff".
+  With Codex, add the template's `session-handoff.sh start` entry to `.codex/hooks.json` › SessionStart.
+  Restart the sessions so the hooks load.
 
 ## v0.7.0 — 2026-10-27
 

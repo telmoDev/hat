@@ -5,7 +5,8 @@ Conservative and idempotent; it never deletes and never commits:
   - a file the workspace lacks is created; one identical to the template of its TEMPLATE_VERSION (read from the
     skill's v<version> tag) is updated; one the user changed is kept as is, and the new template is written next
     to it as <file>.new for a manual merge. An earlier <file>.new with other content stops the update.
-  - .claude/settings.json gets the template's telemetry hooks it lacks; nothing else in it changes.
+  - .claude/settings.json gets the template's telemetry and session handoff hooks it lacks; nothing else in it
+    changes.
   - orchestrator.conf gets the keys it lacks, appended with their comments; no value changes but
     TEMPLATE_VERSION, set last, so a partial run never claims the new version.
   - text the user adapts (AGENTS.md, CLAUDE.md, odd/README.md, memory/, task files) is never edited: the
@@ -64,14 +65,15 @@ def at_version(src, rel):
     return r.stdout if r.returncode == 0 else None
 
 
-def add_telemetry_hooks(settings, template):
-    """Add to settings (a .claude/settings.json dict) the template's telemetry hooks it lacks; returns how many."""
+def add_telemetry_hooks(settings, template, scripts=("telemetry.sh",)):
+    """Add to settings (a .claude/settings.json dict) the template's hooks that run one of scripts and it lacks;
+    returns how many. The benchmark uses it with the default, telemetry only (its measurement layer)."""
     added = 0
     hooks = settings.setdefault("hooks", {})
     for event, groups in template.get("hooks", {}).items():
         for g in groups:
             for h in g["hooks"]:
-                if "telemetry.sh" not in h.get("command", ""):
+                if not any(s in h.get("command", "") for s in scripts):
                     continue
                 have = [x.get("command") for grp in hooks.get(event, []) for x in grp.get("hooks", [])]
                 if h["command"] in have:
@@ -168,10 +170,10 @@ def plan(root, dev):
                 cur = json.loads(cur_text)
             except ValueError:
                 raise Refuse(rel + " is not valid JSON: fix it first")
-            added = add_telemetry_hooks(cur, tpl)
+            added = add_telemetry_hooks(cur, tpl, ("telemetry.sh", "session-handoff.sh"))
             if added:
                 ops.append({"rel": rel, "action": "merge", "text": json.dumps(cur, indent=2) + "\n",
-                            "note": "added %d telemetry hooks" % added})
+                            "note": "added %d telemetry and session handoff hooks" % added})
 
     gi = read(os.path.join(root, ".gitignore"))
     if gi is not None:
