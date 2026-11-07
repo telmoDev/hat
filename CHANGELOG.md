@@ -11,6 +11,14 @@ into the new version's section.
 
 ## Unreleased
 
+- `knowledge.py validate|index` (meta-harness K1): OKF v0.2 knowledge bundles. `validate` checks OKF conformance
+  (permissive: unknown types, keys and broken links are never errors) plus provenance (`sources`), trust
+  (`generated`, `verified`, actors, ISO timestamps with an offset), lifecycle (`status`, `stale_after`), the
+  `x_scope` extension, log dates and secrets; v0.1 concepts pass with legacy warnings. `index` writes each
+  directory's `index.md` listing (by type, then subdirectories) inside a generated block, keeping hand-written text
+  and never touching concepts. Standard library only (PyYAML when installed). Checked on the four official OKF
+  sample bundles: 0 errors, both YAML readers agree on all 54 frontmatters. Nothing in the flow uses it yet.
+
 - The repository is now `telmoDev/hat`: the README says what hat does today, where it is going (the meta-harness
   roadmap) and how to install it; `INSTALL.md` clones from the new URL. The skill (`orchestrator-setup`), the
   clone folder and the workspace paths keep their names.
