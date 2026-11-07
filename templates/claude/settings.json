@@ -23,6 +23,13 @@
             "timeout": 5,
             "shell": "bash",
             "async": true
+          },
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PROJECT_DIR:-$PWD}/.orchestrator/hooks/session-handoff.sh\" start",
+            "timeout": 5,
+            "statusMessage": "Checking the last session's handoff",
+            "shell": "bash"
           }
         ]
       }
@@ -33,6 +40,12 @@
           {
             "type": "command",
             "command": "bash \"${CLAUDE_PROJECT_DIR:-$PWD}/.orchestrator/hooks/telemetry.sh\" hook claude",
+            "timeout": 5,
+            "shell": "bash"
+          },
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PROJECT_DIR:-$PWD}/.orchestrator/hooks/session-handoff.sh\" end",
             "timeout": 5,
             "shell": "bash"
           }

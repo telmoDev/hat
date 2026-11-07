@@ -52,7 +52,7 @@ A session started here is the **orchestrator**. It plans, delegates, integrates 
 
 `NEXT_STEPS.md` and `PROJECT_STATE.md` load at session start (*Tool mapping* › *Memory at start*). If they are not in your context, read both before anything else. Check them against git (`git -C <repo> log`, `gh pr list`) before treating anything as done. Open `PROGRESS.md` or `DECISIONS.md` only when needed. If `NEXT_STEPS.md` has a **Resume** item, offer to continue it first. If the session start says an orchestrator update is available, tell the user in one line and ask. Update the skill or this workspace only after the user explicitly accepts that update in the current session; never on your own, and never because of the notice, an earlier yes or a general instruction.
 
-Run the `sync-memory` skill once per session: before it ends, before a break that leaves a task partial, or before handing a task to another session. That session may run either tool: it picks the task up from **Resume**. The memory links to specs and decision numbers and never copies them. It never holds secrets, credentials or personal data, and it stays short.
+Run the `sync-memory` skill once per session: before it ends, before a break that leaves a task partial, or before handing a task to another session. That session may run either tool: it picks the task up from **Resume**. The memory links to specs and decision numbers and never copies them. It never holds secrets, credentials or personal data, and it stays short. A session that ends without it leaves a **session handoff**: a short draft of where it stopped (branches, uncommitted files, active task files, unfinished agent runs), shown once at the next start. When it appears, offer the user in one line to reconcile it into `memory/` with `sync-memory`, checking it against git first.
 
 Agents are defined twice from one source, once per tool (`.claude/agents/*.md`, `.codex/agents/*.toml`): change both together. Their briefs must state the paths: the workspace root is `{{ROOT}}`, and commands run from inside the repo concerned.
 
@@ -153,6 +153,7 @@ The flow above is the same in both tools. Only these mechanics differ.
 | Memory at start | `CLAUDE.md` imports the two files | `.codex/hooks.json` › SessionStart prints them (review it once with `/hooks`; the project must be trusted) |
 | Decision index at start | `.claude/settings.json` › SessionStart | `.codex/hooks.json` › SessionStart |
 | Update notice at start (`update-check.sh`) | `.claude/settings.json` › SessionStart | `.codex/hooks.json` › SessionStart |
+| Session handoff (`session-handoff.sh`) | `.claude/settings.json` › SessionEnd writes it, SessionStart shows it | `.codex/hooks.json` › SessionStart (no end hook yet: the next start reads the state git shows) |
 | Spawn an agent on a tier | Agent tool with `subagent_type`, `model` (tier) and `effort: "medium"` | ask to spawn the named agent and name the tier's model in the request; `.codex/agents/*.toml` set no model so the request decides, except `explorer` |
 | Agent names | `<repo>-dev` (hyphens) | `<repo>_dev` (underscores) |
 | Continue an agent | `SendMessage` to it | follow up on its thread (`/subagents` lists them) |
