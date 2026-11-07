@@ -111,6 +111,13 @@ equivalence with Claude Code).
 - Attempts: `retry_number` and `parent_invocation_id` count earlier invocations of the same agent type on the same
   task.
 
+## Scope
+
+Every metric belongs to one project: the store lives in that workspace, `project_id` names it, and nothing reads
+or writes another workspace's store. There is no global store. A global view (meta-harness phase 2) may only read,
+read-only, the stores of the projects the user registered, and aggregates at read time; it never copies rows
+between stores. Decided 2026-11-06 (roadmap R2).
+
 ## Store
 
 `.orchestrator/telemetry/telemetry.db` (WAL, 2 s busy timeout), one per workspace, never shared between
