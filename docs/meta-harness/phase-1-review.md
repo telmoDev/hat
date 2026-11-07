@@ -10,7 +10,7 @@ update path from v0.7.0. Every figure below comes from a command that ran; the s
 - **Latency and concurrency**: a workspace scaffolded from the current templates; each Claude Code hook run 20
   times through `.orchestrator/hooks/telemetry.sh` with synthetic payloads, timed end to end (bash + Python start +
   work). Transcripts: the largest real ones on this machine (main session 41 MB, subagent 14.5 MB), read for
-  figures only. Then 8 `SubagentStop` hooks of one session at once.
+  figures only. Then 8 `SubagentStop` hooks of one session at once. Rerun with `scripts/measure_hooks.py`.
 - **Privacy**: a brief with a body after its header, an invalid hook input, an event with an unknown payload key,
   an unreadable transcript path; then the store and `errors.log` were searched for any of it.
 - **Update path**: copies of the two real workspaces' orchestration layers (`kaizen`, `gfu-sis`, both v0.7.0,
@@ -40,8 +40,8 @@ All within target (hook p95 < 100 ms). Nothing blocked a session; nothing printe
 
 | # | Finding | Severity | Decision |
 |---|---|---|---|
-| F1 | `errors.log` quotes an unknown payload key verbatim. Through the hooks keys are ours, but `telemetry.py ingest` takes external input, and a key can carry text (seen: `payload key 'prompt text here: hunter2' …`). | low (local file, `ingest` only) | **fix**: quote a key only when it looks like an identifier |
-| F2 | The session handoff lists every active task file, not the ones the session worked on. On the `gfu-sis` copy, 10 lines of features other sessions own, which `memory/` already tracks. | medium (noise in context) | **fix**: list task files changed since the session started; count the others in one line |
+| F1 | `errors.log` quotes an unknown payload key verbatim. Through the hooks keys are ours, but `telemetry.py ingest` takes external input, and a key can carry text (seen: `payload key 'prompt text here: hunter2' …`). | low (local file, `ingest` only) | **fixed** here: a key is named only when it looks like an identifier (`test_an_unknown_key_that_is_not_an_identifier_is_not_logged`) |
+| F2 | The session handoff lists every active task file, not the ones the session worked on. On the `gfu-sis` copy, 10 lines of features other sessions own, which `memory/` already tracks. | medium (noise in context) | **fixed** here: only task files the session changed, the others counted in one line (`test_only_the_task_files_this_session_changed`); on the `gfu-sis` copy, 10 lines → 2 |
 | F3 | `update.py` doesn't touch `.codex/hooks.json`: Codex workspaces add the handoff hook by hand (CHANGELOG *Workspaces*). | low | accepted for v0.8.0; revisit with the Codex adapter (A2) |
 | F4 | Customized workspaces get several `.new` copies to merge by hand (5 and 6 on the real ones). | expected | accepted: R4 merges them with the user, workspace by workspace |
 | F5 | A main transcript unreadable at its session end stays queued until the next session starts (by design: the last attempt). | none | accepted |
@@ -55,5 +55,6 @@ projects the user registered, read-only.
 
 ## Verdict
 
-F1 is ready to release once F1 and F2 are fixed. Still open after that, by plan: F1-11 (Codex) and F1-14 on a real
+F1 and F2 are fixed in the same PR as this review (tests first; smoke 39 checks). F1 is ready to release. Still
+open, by plan: F1-11 (Codex) and F1-14 on a real
 workspace (R4), and a valid benchmark sample (R6).

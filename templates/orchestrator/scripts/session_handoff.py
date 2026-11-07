@@ -8,7 +8,8 @@ memory/ is written only by the orchestrator (sync-memory). A session closed, kil
 leaves the next one to rebuild its context from git. This keeps a short draft instead: per repo the branch,
 uncommitted files and commits not in origin/<base>; the active task files it changed, with their Next: and
 open tasks; agent runs that started and never finished (from the telemetry store, when there is one). It is shown
-once, at the next start, only when memory/ didn't change during that session; the orchestrator offers to reconcile it into memory/.
+once, at the next start, only when memory/ didn't change during that session; the orchestrator offers to
+reconcile it into memory/.
 A session that ends without its end hook (killed, or a tool that has none) is caught by the next start.
 
 Local git only, no network and no model calls. Paths and counts, never file contents, diffs or commit messages;
