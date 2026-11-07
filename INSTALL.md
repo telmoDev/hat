@@ -38,7 +38,7 @@ Install the **latest release**, not `main`. Clone to `~/orchestrator-setup` (on 
 `%USERPROFILE%\orchestrator-setup`) unless the person names another folder:
 
 ```bash
-url=https://github.com/telmoDev/orchestrator.git
+url=https://github.com/telmoDev/hat.git
 tag=$(git ls-remote --tags --refs --sort=-v:refname "$url" 'v*' | head -1 | sed 's#.*refs/tags/##')
 git clone --branch "$tag" "$url" ~/orchestrator-setup
 ```

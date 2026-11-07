@@ -11,6 +11,10 @@ into the new version's section.
 
 ## Unreleased
 
+- The repository is now `telmoDev/hat`: the README says what hat does today, where it is going (the meta-harness
+  roadmap) and how to install it; `INSTALL.md` clones from the new URL. The skill (`orchestrator-setup`), the
+  clone folder and the workspace paths keep their names.
+
 - `docs/telemetry.md`: the telemetry contract in one place (events and their keys, statuses, figures and their
   sources, the Claude Code adapter, recovery, the store, settings) and the F1 criteria with the tests that prove
   each. `tests/test_telemetry_doc.py` fails when the document and the code disagree. Templates unchanged.
