@@ -6,9 +6,9 @@ Hooks call it through .orchestrator/hooks/session-handoff.sh, which never fails 
 
 memory/ is written only by the orchestrator (sync-memory). A session closed, killed or compacted without it
 leaves the next one to rebuild its context from git. This keeps a short draft instead: per repo the branch,
-uncommitted files and commits not in origin/<base>; the active task files with their Next: and open tasks; agent
-runs that started and never finished (from the telemetry store, when there is one). It is shown once, at the next
-start, only when memory/ didn't change during that session; the orchestrator offers to reconcile it into memory/.
+uncommitted files and commits not in origin/<base>; the active task files it changed, with their Next: and
+open tasks; agent runs that started and never finished (from the telemetry store, when there is one). It is shown
+once, at the next start, only when memory/ didn't change during that session; the orchestrator offers to reconcile it into memory/.
 A session that ends without its end hook (killed, or a tool that has none) is caught by the next start.
 
 Local git only, no network and no model calls. Paths and counts, never file contents, diffs or commit messages;
@@ -104,15 +104,29 @@ def repo_lines(root, cfg):
     return out
 
 
-def task_lines(root):
+def task_hashes(root):
+    out = {}
+    for p in glob.glob(os.path.join(root, "odd", "tasks", "*.md")):
+        with open(p, "rb") as f:
+            out[os.path.basename(p)] = hashlib.sha256(f.read()).hexdigest()
+    return out
+
+
+def task_lines(root, before=None):
+    """The active task files this session changed (all of them when its start didn't record them), and a count
+    of the others, which memory/ already tracks."""
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     import odd_tasks  # next to this file
-    out = []
+    out, unchanged = [], 0
     for p in sorted(glob.glob(os.path.join(root, "odd", "tasks", "*.md"))):
         with open(p, encoding="utf-8") as f:
             body = f.read()
         m = _STATUS.search(body)
         if not m or m.group(1).lower() != "active":
+            continue
+        name = os.path.basename(p)
+        if before is not None and before.get(name) == hashlib.sha256(body.encode("utf-8")).hexdigest():
+            unchanged += 1
             continue
         open_ = [tid for tid, _, status in odd_tasks.task_rows(body) if status.lower() != "done"]
         parts = ["odd/tasks/" + os.path.basename(p)]
@@ -121,7 +135,7 @@ def task_lines(root):
         if open_:
             parts.append("open: " + ", ".join(open_))
         out.append(" · ".join(parts))
-    return out
+    return out, unchanged
 
 
 def agent_line(root, sid):
@@ -143,11 +157,14 @@ def agent_line(root, sid):
     return ["agent runs started and not finished: %d (%s)" % (len(types), ", ".join(sorted(set(types))))]
 
 
-def draft(root, sid, ended_at, how):
+def draft(root, sid, ended_at, how, before=None):
     cfg = conf(root)
-    lines = repo_lines(root, cfg) + task_lines(root) + agent_line(root, sid)
+    tasks, unchanged = task_lines(root, before)
+    lines = repo_lines(root, cfg) + tasks + agent_line(root, sid)
     if not lines:
         return None
+    if unchanged:
+        lines.append("%d other active task file%s unchanged this session" % (unchanged, "" if unchanged == 1 else "s"))
     kept = []
     for line in lines[:MAX_LINES]:
         kept.append("- (a line was left out: it looked like a secret)" if SECRET.search(line) else "- " + line)
@@ -178,7 +195,7 @@ def _write(path, data):
 def _close(root, sid, started, now, how):
     """Write the last session's draft: none when memory/ changed since its start."""
     synced = started is not None and started.get("memory") != memory_hash(root)
-    text = None if synced else draft(root, sid, now, how)
+    text = None if synced else draft(root, sid, now, how, (started or {}).get("tasks"))
     _write(os.path.join(state_dir(root), "last.json"),
            {"session_id": sid, "ended_at": now, "synced": synced, "shown": text is None, "text": text})
 
@@ -226,7 +243,7 @@ def start(root, payload, now=None):
         _write(os.path.join(d, "last.json"), dict(last, shown=True))
     mine = os.path.join(d, sid + ".start.json")
     if not os.path.exists(mine):  # a resumed or compacted session keeps its first start
-        _write(mine, {"session_id": sid, "started_at": now, "memory": memory_hash(root)})
+        _write(mine, {"session_id": sid, "started_at": now, "memory": memory_hash(root), "tasks": task_hashes(root)})
     return text
 
 
