@@ -23,15 +23,19 @@ import sys
 
 from odd_tasks import prose, task_state  # the task-file shape, shared with telemetry.py
 
-ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-MEM = os.path.join(ROOT, "memory")
+import layout  # noqa: E402  next to this file: where the project's files are
+
+ROOT = layout.root(__file__)
+LAYOUT = layout.of(ROOT)
+MEM = LAYOUT.memory
+BASE = os.path.dirname(MEM)  # task links in the memory are relative to it: odd/tasks/… in a workspace, tasks/… in hat's state
 FILES = ["PROJECT_STATE.md", "PROGRESS.md", "DECISIONS.md", "NEXT_STEPS.md"]
-TASKS = os.path.join(ROOT, "odd", "tasks")
+TASKS = LAYOUT.tasks
 
 
 def conf():
     values = {}
-    with open(os.path.join(ROOT, ".orchestrator", "orchestrator.conf")) as fh:
+    with open(LAYOUT.conf) as fh:
         for line in fh:
             m = re.match(r'\s*([A-Z_]+)=["\']?(.*?)["\']?\s*$', line)
             if m:
@@ -91,7 +95,7 @@ if os.path.isdir(TASKS):
     for t in sorted(os.listdir(TASKS)):
         if t.endswith(".md"):
             with open(os.path.join(TASKS, t), encoding="utf-8") as fh:
-                tasks["odd/tasks/" + t] = fh.read()
+                tasks[LAYOUT.task_prefix + t] = fh.read()
 
 
 state_of = {f: task_state(b) for f, b in tasks.items()}
@@ -207,7 +211,7 @@ for n, line in enumerate(prose(text.get("PROGRESS.md", "")).splitlines(), 1):
     doc = re.match(r"Doc:\s*`?([^`\s]+)", line)
     if not doc:
         continue
-    if not os.path.isfile(os.path.join(ROOT, doc.group(1))):
+    if not os.path.isfile(os.path.join(BASE, doc.group(1))):
         errors.append(f"PROGRESS.md:{n}: no such task file: {doc.group(1)}")
     elif state_of.get(doc.group(1), {}).get("status") == "done":
         errors.append(f"PROGRESS.md:{n}: {doc.group(1)} is done but PROGRESS still lists it")
@@ -215,7 +219,7 @@ for n, line in enumerate(prose(text.get("PROGRESS.md", "")).splitlines(), 1):
 # 3g. An In flight row that links a task file agrees with it on the criteria passed.
 if m:
     for row in m.group(1).splitlines():
-        doc = re.search(r"(odd/tasks/[^\s|`)\]]+\.md)", row)
+        doc = re.search(r"(" + re.escape(LAYOUT.task_prefix) + r"[^\s|`)\]]+\.md)", row)
         if not row.startswith("|") or not doc:
             continue
         st = state_of.get(doc.group(1))
@@ -239,7 +243,7 @@ if words > WORD_BUDGET:
 
 # 6. Codex reads only the first project_doc_max_bytes of AGENTS.md: past it, the end of the guide is lost.
 codex_cfg, guide = os.path.join(ROOT, ".codex", "config.toml"), os.path.join(ROOT, "AGENTS.md")
-if os.path.exists(codex_cfg) and os.path.exists(guide):
+if not os.environ.get("HAT_STATE") and os.path.exists(codex_cfg) and os.path.exists(guide):
     with open(codex_cfg, encoding="utf-8") as fh:
         lim = re.search(r"^project_doc_max_bytes\s*=\s*(\d+)", fh.read(), re.M)
     limit, size = int(lim.group(1)) if lim else 32768, os.path.getsize(guide)

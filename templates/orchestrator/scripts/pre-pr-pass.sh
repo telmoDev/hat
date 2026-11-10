@@ -7,8 +7,8 @@
 # when set). TDD_EXEMPT="<reason>" skips that check for this branch and prints the reason. TDD_REPOS, when set,
 # limits the check to those repos.
 set -euo pipefail
-root="$(cd "$(dirname "$0")/../.." && pwd)"  # the workspace root, whichever tool runs this
-. "$root/.orchestrator/orchestrator.conf"
+. "$(dirname "$0")/layout.sh"  # root, conf, mem, tasks, tmp, here: the workspace or hat's state
+. "$conf"
 [ $# -eq 2 ] || { echo "usage: pre-pr-pass.sh <repo> <branch>" >&2; exit 2; }
 repo=$1 branch=$2
 case " $REPOS " in *" $repo "*) ;; *) echo "pre-pr-pass: repo must be one of: $REPOS" >&2; exit 2 ;; esac
@@ -35,6 +35,6 @@ elif [ "${TDD:-off}" = strict ] && { [ -z "${TDD_REPOS:-}" ] || case " $TDD_REPO
     fi
   done < <(git -C "$root/$repo" log --reverse --no-merges ${since[@]+"${since[@]}"} --format='%H %s' "$ref..$sha")
 fi
-mkdir -p "$root/.orchestrator/tmp/pre-pr"
-echo "$sha" > "$root/.orchestrator/tmp/pre-pr/${repo//\//_}--${branch//\//_}"
+mkdir -p "$tmp/pre-pr"
+echo "$sha" > "$tmp/pre-pr/${repo//\//_}--${branch//\//_}"
 echo "pre-pr gate passed: $repo $branch $sha"

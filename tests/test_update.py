@@ -134,7 +134,8 @@ class Workspace(unittest.TestCase):
 
     def release(self, skill, *changes):
         for change in changes:
-            with open(os.path.join(skill, "templates", "orchestrator", "scripts", change), "a") as f:
+            rel = change if "/" in change else "orchestrator/scripts/" + change  # a bare name is a script
+            with open(os.path.join(skill, "templates", *rel.split("/")), "a") as f:
                 f.write("# changed after the --dev snapshot\n")
         if changes:
             git("commit", "-qam", "a later change", cwd=skill, env=self.env)
@@ -353,7 +354,7 @@ class DevToRelease(Workspace):
         skill = self.dev_skill()
         self.update("--dev", skill=skill)
         self.commit()
-        self.release(skill, "telemetry.py", "memory-state.sh")
+        self.release(skill, "telemetry.py", "skills/design-patterns/SKILL.md")
         before = self.read(".orchestrator/scripts/telemetry.py")
         code, out = self.update(skill=skill)
         self.assertEqual(code, 0, out)
@@ -362,8 +363,8 @@ class DevToRelease(Workspace):
         self.assertEqual(self.read(".orchestrator/scripts/telemetry.py"), before)
         self.assertTrue(self.read(".orchestrator/scripts/telemetry.py.new").endswith(
             "# changed after the --dev snapshot\n"))
-        # memory-state.sh was still v0.7.0's (the snapshot didn't change it): updated as usual.
-        self.assertTrue(self.read(".orchestrator/scripts/memory-state.sh").endswith(
+        # design-patterns was still v0.7.0's (the snapshot didn't change it): updated as usual.
+        self.assertTrue(self.read(".agents/skills/design-patterns/SKILL.md").endswith(
             "# changed after the --dev snapshot\n"))
         self.assertIn('TEMPLATE_VERSION="%s"' % NEXT, self.read(".orchestrator/orchestrator.conf"))
 

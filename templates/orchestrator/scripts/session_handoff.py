@@ -26,6 +26,8 @@ import sqlite3
 import subprocess
 import sys
 
+import layout  # next to this file: where the project's files are
+
 MAX_LINES = 10
 MAX_ITEM = 80
 # The same rule as memory-check.py's SECRET (tests/test_session_handoff.py keeps them equal).
@@ -47,7 +49,7 @@ def utc(now=None):
 def conf(root):
     out = {}
     try:
-        with open(os.path.join(root, ".orchestrator", "orchestrator.conf"), encoding="utf-8") as f:
+        with open(layout.of(root).conf, encoding="utf-8") as f:
             for line in f:
                 m = re.match(r'^([A-Z_]+)="?([^"\n]*)"?\s*$', line)
                 if m:
@@ -58,13 +60,13 @@ def conf(root):
 
 
 def state_dir(root):
-    return os.path.join(root, ".orchestrator", "tmp", "handoff")
+    return layout.of(root).handoff
 
 
 def memory_hash(root):
     """What sync-memory changes: the memory files' contents."""
     digest = hashlib.sha256()
-    for p in sorted(glob.glob(os.path.join(root, "memory", "*.md"))):
+    for p in sorted(glob.glob(os.path.join(layout.of(root).memory, "*.md"))):
         with open(p, "rb") as f:
             digest.update(os.path.basename(p).encode() + b"\0" + f.read() + b"\0")
     return digest.hexdigest()
@@ -107,7 +109,7 @@ def repo_lines(root, cfg):
 
 def task_hashes(root):
     out = {}
-    for p in glob.glob(os.path.join(root, "odd", "tasks", "*.md")):
+    for p in glob.glob(os.path.join(layout.of(root).tasks, "*.md")):
         with open(p, "rb") as f:
             out[os.path.basename(p)] = hashlib.sha256(f.read()).hexdigest()
     return out
@@ -119,7 +121,7 @@ def task_lines(root, before=None):
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     import odd_tasks  # next to this file
     out, unchanged = [], 0
-    for p in sorted(glob.glob(os.path.join(root, "odd", "tasks", "*.md"))):
+    for p in sorted(glob.glob(os.path.join(layout.of(root).tasks, "*.md"))):
         with open(p, encoding="utf-8") as f:
             body = f.read()
         m = _STATUS.search(body)
@@ -130,7 +132,7 @@ def task_lines(root, before=None):
             unchanged += 1
             continue
         open_ = [tid for tid, _, status in odd_tasks.task_rows(body) if status.lower() != "done"]
-        parts = ["odd/tasks/" + os.path.basename(p)]
+        parts = [layout.of(root).task_prefix + os.path.basename(p)]
         if m.group(2):
             parts.append("Next: " + _short(m.group(2)))
         if open_:
@@ -140,7 +142,7 @@ def task_lines(root, before=None):
 
 
 def agent_line(root, sid):
-    db = os.path.join(root, ".orchestrator", "telemetry", "telemetry.db")
+    db = layout.of(root).telemetry
     if not os.path.isfile(db):
         return []
     try:
@@ -249,7 +251,7 @@ def start(root, payload, now=None):
 
 
 def main(argv):
-    root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    root = layout.root(__file__)
     raw = sys.stdin.read()
     try:
         payload = json.loads(raw) if raw.strip() else {}
@@ -268,7 +270,7 @@ if __name__ == "__main__":
         main(sys.argv)
     except Exception as err:  # never fail the session: note it next to the state
         try:
-            root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            root = layout.root(__file__)
             os.makedirs(state_dir(root), exist_ok=True)
             with open(os.path.join(state_dir(root), "errors.log"), "a") as f:
                 f.write("%s %s: %s\n" % (utc(), type(err).__name__, str(err)[:200].replace("\n", " ")))

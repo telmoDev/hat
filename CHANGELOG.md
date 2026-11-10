@@ -11,6 +11,12 @@ into the new version's section.
 
 ## Unreleased
 
+- Global install G2a: every script finds the project's files through `layout.py` / `layout.sh`. In a workspace
+  nothing changes. With `HAT_STATE` (the project's `~/.hat/projects/<id>/`) and `HAT_ROOT` set, as the global
+  hooks will set them, the config, memory, task files (`tasks/`), telemetry store, session handoff and pre-PR
+  stamps are read and written there, the scripts run straight from the clone, and nothing is written inside the
+  project. Nothing sets `HAT_STATE` yet.
+
 - `guide/` (global install G4): the guide every hat project will share, `guide/AGENTS.md`, the template of a
   project's own rules, `guide/rules.md` (commands, repo guides, how the repos connect, rules), and the three global
   agents `guide/agents/hat-explorer.md`, `hat-architect.md` and `hat-dev.md` (one dev agent for every repo, which
