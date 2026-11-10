@@ -4,6 +4,7 @@
   python3 scripts/hat.py project add [<root>]        register a project (default: the git top level, or the folder)
   python3 scripts/hat.py project list                every project, with "missing" when its root is gone
   python3 scripts/hat.py project move <id> <root>    point a project at its new root
+  python3 scripts/hat.py project remove <id>         unregister a project; its state stays in the home
   python3 scripts/hat.py context [<folder>]          the session-start header of the project, as hook JSON
   python3 scripts/hat.py commit <message>            commit the current project's state in hat's home
   python3 scripts/hat.py resolve-payload < payload   resolve the "cwd" of a hook's JSON: "<id>\t<root>\t<state>"
@@ -91,8 +92,8 @@ def default_root(cwd):
 
 
 CLONE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-IGNORE = ("# hat's home: what is regenerated or local to a session stays out of git.\n"
-          "projects/*/telemetry.db*\nprojects/*/handoff/\nprojects/*/tmp/\n*.tmp\n")
+IGNORE_LINES = ("projects/*/telemetry.db*", "projects/*/handoff/", "projects/*/tmp/", "*.tmp",
+                "backup/", "install.json")  # backup/ may hold settings with tokens; install.json is this machine's
 
 
 def state(pid):
@@ -108,13 +109,21 @@ def record(message, *paths):
     """Commit paths (relative to the home) with message; the home becomes a git repo on first use. Returns
     "committed", "nothing to commit" or the error, and never raises: a registration never depends on git."""
     try:
-        if not os.path.isdir(os.path.join(home(), ".git")):
-            if git("init", "-q").returncode != 0:
-                return "git init failed"
-            with open(os.path.join(home(), ".gitignore"), "w", encoding="utf-8", newline="\n") as f:
-                f.write(IGNORE)
+        if not os.path.isdir(os.path.join(home(), ".git")) and git("init", "-q").returncode != 0:
+            return "git init failed"
+        ignore = os.path.join(home(), ".gitignore")
+        have = open(ignore, encoding="utf-8").read().splitlines() if os.path.isfile(ignore) else []
+        missing = [l for l in IGNORE_LINES if l not in have]
+        if missing:  # a new home, or one from an older hat
+            with open(ignore, "a", encoding="utf-8", newline="\n") as f:
+                f.write(("" if have else "# hat's home: what is regenerated or local to this machine stays out of git.\n")
+                        + "\n".join(missing) + "\n")
             paths += (".gitignore",)
-        git("add", "-A", "--", *paths)
+        tracked = set(git("ls-files", "--", *paths).stdout.split())
+        present = [p for p in paths if os.path.exists(os.path.join(home(), p)) or p in tracked
+                   or any(t.startswith(p.rstrip("/") + "/") for t in tracked)]
+        if present:
+            git("add", "-A", "--", *present)
         if git("diff", "--cached", "--quiet").returncode == 0:
             return "nothing to commit"
         who = [] if git("config", "user.email").stdout.strip() else ["-c", "user.name=hat", "-c", "user.email=hat@localhost"]
@@ -183,6 +192,18 @@ def add(root):
     return 0
 
 
+def remove(pid):
+    """Unregister a project. Its state (memory, tasks, telemetry) stays in the home, never deleted."""
+    projects = load()
+    if pid not in projects:
+        return fail("no project " + pid)
+    del projects[pid]
+    save(projects)
+    record("hat: remove project " + pid, "projects.toml")
+    print("removed %s; its state stays in %s" % (pid, norm(state(pid))))
+    return 0
+
+
 def move(pid, root):
     root = norm(root)
     projects = load()
@@ -234,6 +255,8 @@ def main(argv):
         for pid, p in sorted(load().items()):
             print("%s\t%s%s" % (pid, p["root"], "" if os.path.isdir(p["root"]) else "\tmissing"))
         return 0
+    if args[:2] == ["project", "remove"] and len(args) == 3:
+        return remove(args[2])
     if args[:2] == ["project", "move"] and len(args) == 4:
         return move(args[2], args[3])
     print(__doc__.strip(), file=sys.stderr)

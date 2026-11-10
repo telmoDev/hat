@@ -98,7 +98,7 @@ Briefs are self-contained, because the agent sees none of this conversation. Eac
 - The skills in *Standards*, for the tasks their row names: the brief names each one that applies.
 - A repo's own skills, if it has any, for work inside it. A repo with none uses hat's skills.
 
-hat's skills live in `<hat>` and are linked into each tool's global skills folder by the install. A subagent may not get them as invocable skills, so the brief gives the path and the agent reads `SKILL.md` directly: `<hat>/templates/skills/<name>/SKILL.md`, or the repo's copy when it has one. A subagent never commits, branches or pushes unless the brief says to.
+hat's skills live in `<hat>/guide/skills/`; the install links only `sync-memory` and `orchestrator-metrics` into each tool's global skills folder, so other sessions on the machine don't list the rest. A subagent may not get them as invocable skills, so the brief gives the path and the agent reads `SKILL.md` directly: `<hat>/guide/skills/<name>/SKILL.md`, or the repo's copy when it has one. A subagent never commits, branches or pushes unless the brief says to.
 
 ### Token budget
 
@@ -146,9 +146,9 @@ Windows; for Codex, its `bin` folder on `PATH`) and Python may be `py -3` or `py
 | Spawn an agent on a tier | Agent tool with `subagent_type`, `model` (tier) and `effort: "medium"` | ask to spawn the named agent and name the tier's model in the request |
 | Agent names | `hat-explorer`, `hat-architect`, `hat-dev` | `hat_explorer`, `hat_architect`, `hat_dev` |
 | Continue an agent | `SendMessage` to it | follow up on its thread (`/subagents` lists them) |
-| Skills | `~/.claude/skills/` (linked to `<hat>`); invoke `/sync-memory` | `~/.agents/skills/` (linked to `<hat>`); invoke `$sync-memory` |
+| Skills | `sync-memory` and `orchestrator-metrics` linked in `~/.claude/skills/`; invoke `/sync-memory`. The standards and `pre-pr-review` are read by path (`<hat>/guide/skills/<name>/SKILL.md`) | the same two in `~/.agents/skills/`; invoke `$sync-memory` |
 | Small-task diff review (step 4) | `/code-review medium` on the branch | the orchestrator reviews part B itself, or one `hat-architect` on the normal tier |
-| Large-task review (step 4) | skill `pre-pr-review` | skill `$pre-pr-review` (same groups and verifier) |
+| Large-task review (step 4) | read `<hat>/guide/skills/pre-pr-review/SKILL.md` and follow it | the same |
 | Compaction | `autoCompactWindow` in `~/.claude/settings.json`: the install proposes 150k and an idle compaction from 100k, never sets them without the user's yes | `~/.codex/config.toml`: `model_auto_compact_token_limit` |
 | Attribution off (only with `ATTRIBUTION="refuse"`) | `push-pr.sh` refuses it; `attribution` in `~/.claude/settings.json` stays the user's | `push-pr.sh` refuses it |
 | Agent run figures (tokens, duration) | recorded by the telemetry hooks in `<state>/telemetry.db`: `telemetry.py report`, never copied into the run log | not recorded yet (Codex payloads unverified): the run log notes what the subagent's thread shows, otherwise `not reported` |

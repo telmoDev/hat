@@ -12,7 +12,7 @@ Stack, commands and conventions: as the brief gives them, from the project's rul
 Before writing code:
 - Read the repo's guide the brief names: its own `CLAUDE.md`/`AGENTS.md`, or its section in the project's rules. Also read its `README.md` if there is one.
 - If the brief's `Task:` line names a task file (`<state>/tasks/<feature>.md` › T<n>), read its *Request*, *Outcome* and your task there. They are the requirements word for word, and they win over any summary.
-- Read every skill the brief names, from `<hat>/templates/skills/<name>/SKILL.md` or the repo's own copy, and apply it. Open it with your file-reading tool before the first edit, and say in your report which ones you read.
+- Read every skill the brief names, from `<hat>/guide/skills/<name>/SKILL.md` or the repo's own copy, and apply it. Open it with your file-reading tool before the first edit, and say in your report which ones you read.
 - Follow the repo's existing conventions. Don't introduce a second way of doing the same thing.
 
 Standards digest (hat's default standards; apply it on every task, it is short on purpose):

@@ -11,6 +11,14 @@ into the new version's section.
 
 ## Unreleased
 
+- From the first live run of the global install: `hat project remove <id>` (unregisters; the project's state stays
+  in the home, never deleted); hat's home keeps `backup/` (settings may hold tokens) and `install.json` out of
+  git, and an older home gets the missing ignore lines; a commit no longer fails on a path that was never
+  committed. Only `sync-memory` and `orchestrator-metrics` are linked globally, because every session on the
+  machine lists the descriptions of global skills; the standards and `pre-pr-review` are read by path from
+  `<hat>/guide/skills/`, and a reinstall unlinks what an older install linked. A test runs a whole session
+  through the global hooks and checks nothing is written inside the project.
+
 - Global install G3: `bash install.sh --global` wires hat once, for every project: the hooks in
   `~/.claude/settings.json` (through `scripts/hat-hook.sh`, acting only in registered projects), a pointer of
   under 90 words in `~/.claude/CLAUDE.md` (and `~/.codex/AGENTS.md` when Codex is set up), the agents `hat-explorer`,

@@ -95,9 +95,14 @@ def unlink(path):
         os.remove(path)
 
 
+# Only the skills the orchestrator invokes are linked globally: every session on the machine lists their
+# descriptions, in a project or not. The standards and pre-pr-review are read by path from the brief.
+GLOBAL_SKILLS = ("orchestrator-metrics", "sync-memory")
+
+
 def skills():
     base = os.path.join(CLONE, "guide", "skills")
-    return sorted(n for n in os.listdir(base) if os.path.isfile(os.path.join(base, n, "SKILL.md")))
+    return [n for n in GLOBAL_SKILLS if os.path.isfile(os.path.join(base, n, "SKILL.md"))]
 
 
 def agents():
@@ -182,6 +187,11 @@ def install():
     for path in [home(".claude", "CLAUDE.md")] + ([home(".codex", "AGENTS.md")] if os.path.isdir(home(".codex")) else []):
         if add_block(path) and path not in m["blocks"]:
             m["blocks"].append(path)
+    wanted = {path for _, path, _ in targets()}
+    for path in [p for p in m["links"] if p not in wanted]:  # linked by an older install
+        if is_link(path):
+            unlink(path)
+        m["links"].remove(path)
     for kind, path, src in targets():
         if kind == "agent":
             if read(path) != read(src):
