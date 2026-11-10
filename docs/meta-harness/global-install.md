@@ -1,6 +1,6 @@
 # Design: global install (v0.9.0)
 
-Status: proposal for the user's approval (2026-11-10). Nothing here is built yet.
+Status: decisions G-D1…G-D4 taken by the user (2026-11-10); G0 next. Nothing here is built yet.
 
 The user's direction (2026-11-10): hat is installed **once, for every project**, not copied into each one. Today
 the skill is global (`~/.claude/skills/orchestrator-setup`) but the layer that does the work is copied into each
@@ -114,9 +114,9 @@ verified: the pointer goes into `~/.codex/AGENTS.md`, project state is read by t
 | Architecture §C | a project is a workspace with its own `.orchestrator/` | a project is a registered root; hat state lives outside it |
 | Phase order | global layer in phase 2 (v0.9.0) after the baseline | global install is the next phase (v0.9.0); the baseline is gathered on it |
 
-## 10. Decisions for the user
+## 10. Decisions
 
-| # | Question | Recommendation |
+| # | Question | Decided (user, 2026-11-10) |
 |---|---|---|
 | G-D1 | Where hat is active | registered projects only; in an unregistered git repo, one line at start offers to register it (≈ 20 tokens) |
 | G-D2 | Memory versioned? Today it is committed in the workspace root's git | `~/.hat/` as a local git repo, one commit per `sync-memory` (history kept, no remote unless the user adds one) |

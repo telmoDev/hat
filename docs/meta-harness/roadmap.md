@@ -23,11 +23,15 @@ keeps working at every step and becomes the meta-harness phase by phase, a littl
 
 ## 2. Phases at a glance
 
+Reordered 2026-11-10 (user): hat is installed globally, so the global install comes first, as phase 1 (v0.9.0);
+the baseline is gathered on it. Later phases keep their content; their release numbers shift by one minor.
+
 | Phase | Name | Release | Brief | Gate in one line |
 |---|---|---|---|---|
 | 0 | Close F1 | v0.8.0 | F1 + session memory | telemetry and session handoff live on one real workspace |
-| 1 | Baseline | v0.8.x | F1, F3 (data) | we know where the tokens go, with a valid sample |
-| 2 | Multi-project core | v0.9.0 | Meta-Harness Core, Harness Abstraction, Projects | two projects registered, isolated, seen together read-only |
+| 1 | Global install | v0.9.0 | Meta-Harness Core, Projects | one install for every project, nothing in the repos ([global-install.md](global-install.md)) |
+| 1b | Baseline | v0.9.x | F1, F3 (data) | we know where the tokens go, with a valid sample, gathered on the global install |
+| 2 | Multi-project core | v0.10.0 | Harness Abstraction, cross-project views | the remaining phase-2 work the global install doesn't cover |
 | 3 | Project knowledge | v0.10.0 | Knowledge Platform (project scope) | knowledge exported and queried with no net token increase |
 | 4 | Governance | v0.11.0 | F4 | a policy floor no project can loosen, compiled into each runtime |
 | 5 | Code and agent intelligence | v0.12.0 | F2, F3 | each feature beats the baseline or stays opt-in |
@@ -264,7 +268,7 @@ once shipped.
 |---|---|---|---|
 | D1 | What the rename to `hat` covers | Phase 0 | applied in #26 as recommended: URLs + name in prose; paths kept |
 | D9 | Docs language | Phase 0 | **decided 2026-11-06: English** |
-| D5 | Global location | Phase 2 | `~/.hat/`, opt-in, read-only on projects |
+| D5 | Global location | Phase 1 | **changed 2026-11-10**: `~/.hat/` is the install, read-only on project files; see [global-install.md](global-install.md) §9 |
 | D2 | llm-wiki has no licence | Phase 3 | native provider; ask the author; optional provider if licensed |
 | D3 | OKF version | Phase 3 | v0.2, pinned per bundle; read v0.1 with fallbacks (confirmed 2026-11-06, applied in K1) |
 | D4 | YAML parsing | Phase 3 | stdlib subset; PyYAML when present (confirmed 2026-11-06, applied in K1) |
