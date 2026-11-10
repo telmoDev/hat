@@ -144,6 +144,24 @@ class Migrate(unittest.TestCase):
         self.assertFalse(os.path.exists(os.path.join(self.state(), "overrides", ".orchestrator", "scripts",
                                                      "memory-check.py")))  # unchanged: hat's
 
+    def test_files_a_later_hat_brought_are_hats(self):
+        # update.sh --dev leaves TEMPLATE_VERSION at 0.7.0 but brings today's scripts: they are hat's, not the project's.
+        p = subprocess.run([BASH, os.path.join(REPO, "scripts", "update.sh"), "--dev", self.ws.replace("\\", "/")],
+                           capture_output=True, encoding="utf-8", env=self.genv)
+        self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+        git("add", "-A", cwd=self.ws, env=self.genv)
+        git("commit", "-qm", "update", cwd=self.ws, env=self.genv)
+        self.before = snapshot(self.ws)
+        code, out = self.migrate()
+        self.assertEqual(code, 0, out)
+        overrides = os.path.join(self.state(), "overrides")
+        found = sorted(os.path.relpath(os.path.join(d, f), overrides).replace("\\", "/")
+                       for d, _, fs in os.walk(overrides) for f in fs)
+        self.assertIn(".orchestrator/scripts/push-pr.sh", found)  # the user's own tweak
+        for hats in (".orchestrator/scripts/telemetry.py", ".orchestrator/scripts/layout.py",
+                     ".claude/skills/sync-memory/SKILL.md", ".orchestrator/update-keep"):
+            self.assertNotIn(hats, found)
+
     def test_the_whole_layer_is_kept_and_the_report_says_what_to_review(self):
         code, out = self.migrate()
         layer = os.path.join(self.state(), "migrated-layer")

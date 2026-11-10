@@ -11,6 +11,16 @@ into the new version's section.
 
 ## Unreleased
 
+- Global install G6a: `hat migrate <workspace> [--dry-run]` moves a workspace with the per-project layer to the
+  global install, saving what is the project's first. Each layer file is compared with the templates of its
+  `TEMPLATE_VERSION`, of every later release and of the current clone (placeholders filled at setup count as
+  wildcards; generated copies and caches are skipped): the project sections of `AGENTS.md` and every paragraph
+  that differs go verbatim to `rules.md`, other changed or added files to `overrides/`, its own checklist to
+  `checklist.md`. Memory, task files, conf, telemetry (SQLite backup) and handoff state are copied as they are, and
+  the whole layer to `migrated-layer/` (git-ignored). Nothing is registered until a check confirms every
+  project-specific paragraph is in `rules.md`. The workspace is never changed: it keeps its own layer, which the
+  global hooks leave alone, until it is cleaned up (G6b).
+
 - Global install G5 (roadmap X4, configure instead of forking): no layer file cites a checklist item by number
   any more (`pre-pr-pass.sh`, `pre-pr-review`): a project with its own checklist keeps the template's files. The
   ticket system is configuration: `TICKETS` (e.g. `jira`, `github`) and `TICKET_PROJECT` in the config, and an
