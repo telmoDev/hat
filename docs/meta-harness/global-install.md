@@ -100,10 +100,24 @@ verified: the pointer goes into `~/.codex/AGENTS.md`, project state is read by t
 
 - **Coexistence.** A workspace with the per-project layer (`.orchestrator/` present) keeps working. The global
   hooks skip any session whose project still has its own layer, so nothing runs twice.
-- **Migration** (`hat migrate <workspace>`, on the user's yes): registers the project, moves `memory/`,
-  `odd/tasks/`, the telemetry store and the handoff state into `~/.hat/projects/<id>/`, turns the conf and the
-  forked files into config keys (§5), and lists the layer files the workspace can then delete. It never deletes
-  them itself and never commits. A dry run first, like `update.sh`.
+- **Detection.** The global SessionStart hook sees an old per-project layer (`.orchestrator/` with a
+  `TEMPLATE_VERSION`) and offers, in one line, to migrate it.
+- **Migration** (`hat migrate <workspace>`, on the user's yes, dry run first). The project's own guidelines are
+  saved before anything is cleaned up, so the agent keeps following them:
+  1. **Copy what is the project's, without a model.** Each layer file is compared with the template of the
+     workspace's `TEMPLATE_VERSION`. What equals the template is hat's and needs no copy. What differs is the
+     project's: the adapted sections of `AGENTS.md` (workspace rules, repo guides, how the repos connect,
+     standards, ticket steps), the standards digests of the `*-dev` agents, its checklist, and every file it kept
+     with `--keep-mine`. These go **verbatim** to `projects/<id>/rules.md` and `projects/<id>/overrides/`.
+     `memory/`, `odd/tasks/`, the telemetry store, the handoff state and `orchestrator.conf` are copied as they are.
+  2. **Keep the whole layer too.** An untouched copy goes to `projects/<id>/migrated-layer/`.
+  3. **Sort with the user.** The orchestrator reviews `rules.md` with the user: what fits a config key (§5) moves
+     to `config`; the rest stays as project rules, loaded at the start of every session of that project. It never
+     summarizes on its own: the original text stays until the user approves each change.
+  4. **Verify.** A deterministic check confirms every project-specific line is under `~/.hat/projects/<id>/`
+     (in `rules.md`, `overrides/`, `config` or `memory/`). One missing line stops the migration.
+  5. **Clean up, only on the user's yes.** The layer files are removed in one commit at the workspace root, so git
+     can undo it. The app repos are never touched.
 
 ## 9. What changes in earlier decisions
 
@@ -133,7 +147,7 @@ verified: the pointer goes into `~/.codex/AGENTS.md`, project state is read by t
 | G3 | Global wiring: `install.sh --global` merges hooks into `~/.claude/settings.json`, adds the `CLAUDE.md` pointer, links agents and skills; `--uninstall` removes exactly what it added | M | G1 |
 | G4 | Guide split: a project-agnostic guide in the clone, project rules in `projects/<id>/rules.md`, the generic `dev` agent | M | G0 |
 | G5 | Config instead of forks (X4): `TICKETS`, checklist items by title, the keys of §5 | M | G4 |
-| G6 | `hat migrate` (dry run, move, report) and coexistence with per-project layers | M | G2 G3 |
+| G6 | `hat migrate`: detection, verbatim copy of the project's own guidelines, full layer copy, review with the user, verification, cleanup on yes; coexistence with per-project layers | M | G2 G3 G4 |
 | G7 | `hat doctor` and `hat status` across registered projects (read-only) | S | G1 |
 
 Exit gate for v0.9.0: one machine with the global install and no per-project layer; two projects registered, each
