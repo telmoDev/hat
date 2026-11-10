@@ -325,6 +325,8 @@ def move(pid, root):
 
 
 def main(argv):
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")  # status prints "—" and "·"; Windows pipes default to cp1252
     args = argv[1:]
     if args[:1] == ["resolve"] and len(args) <= 2:
         hit = resolve(args[1] if len(args) == 2 else os.getcwd())

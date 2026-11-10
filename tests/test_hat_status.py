@@ -117,6 +117,17 @@ class Views(unittest.TestCase):
         self.assertIn("root missing", out)
 
     def test_doctor_is_happy_after_the_install(self):
+        # A stand-in claude on PATH: CI runners have none, and doctor rightly reports that.
+        bin_ = os.path.join(self.tmp, "bin")
+        os.makedirs(bin_)
+        stub = os.path.join(bin_, "claude.py" if os.name == "nt" else "claude")
+        with open(stub, "w", newline="\n") as f:
+            f.write("#!%s\nprint('9.9.9 (Claude Code)')\n" % sys.executable)
+        os.chmod(stub, 0o755)
+        if os.name == "nt":
+            with open(os.path.join(bin_, "claude.cmd"), "w") as f:
+                f.write('@"%s" "%s" %%*\n' % (sys.executable, stub))
+        self.env["PATH"] = bin_ + os.pathsep + self.env.get("PATH", "")
         subprocess.run([sys.executable, os.path.join(REPO, "scripts", "hat_install.py"), "install"],
                        capture_output=True, env=self.env, check=True)
         self.project("shop")
