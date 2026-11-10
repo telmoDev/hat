@@ -1,6 +1,6 @@
 # G4 proposal: one guide for every project, rules per project
 
-Status: proposal for the user's approval (2026-11-10). Nothing is moved yet. Part of the global install
+Status: approved by the user, G4-D1…D3 as recommended (2026-11-10). Nothing is moved yet. Part of the global install
 ([global-install.md](global-install.md) §3, §5, §6).
 
 Today `templates/AGENTS.md` (~4,000 words) is filled in per workspace by setup: placeholders (`{{NAME}}`,
@@ -67,9 +67,9 @@ nothing changes; if it is per session, the decision index moves to a file the gu
 The flow (Organic + Outcome-driven), sizes, tiers, TDD, the pre-PR gate, the run log, memory rules, push and
 merge rules. G4 moves text and removes placeholders; it changes no rule.
 
-## 6. Decisions for the user
+## 6. Decisions
 
-| # | Question | Recommendation |
+| # | Question | Decided (user, 2026-11-10) |
 |---|---|---|
 | G4-D1 | Agent names | `hat-explorer`, `hat-architect`, `hat-dev` |
 | G4-D2 | One `hat-dev` for every repo, briefed per repo, instead of one agent per repo | yes: per-repo agents can't be global, and the brief already carries repo, criteria and contract |
