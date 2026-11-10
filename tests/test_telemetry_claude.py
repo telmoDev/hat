@@ -506,8 +506,8 @@ class HookConfig(unittest.TestCase):
                     self.assertLessEqual(h.get("timeout", 600), 5, event)
                     if event != "SessionStart":
                         self.assertFalse(h.get("async"), event)
-        self.assertEqual(seen, {"SessionStart", "SessionEnd", "SubagentStart", "SubagentStop", "PostToolUse",
-                                "PostToolUseFailure"})
+        self.assertEqual(seen, {"SessionStart", "SessionEnd", "PreCompact", "SubagentStart", "SubagentStop",
+                                "PostToolUse", "PostToolUseFailure"})
 
 
 class Hook(unittest.TestCase):

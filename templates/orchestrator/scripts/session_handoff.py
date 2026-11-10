@@ -160,7 +160,8 @@ def agent_line(root, sid):
     return ["agent runs started and not finished: %d (%s)" % (len(types), ", ".join(sorted(set(types))))]
 
 
-def draft(root, sid, ended_at, how, before=None):
+def where(root, sid, before=None):
+    """The draft's lines: dirty branches, active task files, unfinished agent runs. None when there is nothing."""
     cfg = conf(root)
     tasks, unchanged = task_lines(root, before)
     lines = repo_lines(root, cfg) + tasks + agent_line(root, sid)
@@ -173,6 +174,13 @@ def draft(root, sid, ended_at, how, before=None):
         kept.append("- (a line was left out: it looked like a secret)" if SECRET.search(line) else "- " + line)
     if len(lines) > MAX_LINES:
         kept.append("- … and %d more" % (len(lines) - MAX_LINES))
+    return kept
+
+
+def draft(root, sid, ended_at, how, before=None):
+    kept = where(root, sid, before)
+    if not kept:
+        return None
     return ("Session handoff: the last session (%s, %s %s) didn't update memory/, so where it stopped wasn't saved. "
             "From git and the task files:\n%s\nOffer the user, in one line, to reconcile this into memory/ with "
             "sync-memory before anything else; check it against git first."
@@ -219,6 +227,21 @@ def end(root, payload, now=None):
         os.remove(path)
 
 
+def compact(root, payload, now=None):
+    """PreCompact: save where the session is, whether or not memory/ was synced: what compaction loses is the
+    session's own context. The SessionStart that follows (source "compact") shows it once."""
+    if conf(root).get("SESSION_HANDOFF", "on") == "off":
+        return
+    now = utc(now)
+    sid = _session_id(payload, now)
+    kept = where(root, sid)  # every active task file with its Next: what the summary may lose
+    if kept:
+        trigger = payload.get("trigger") if isinstance(payload.get("trigger"), str) else "?"
+        _write(os.path.join(state_dir(root), sid + ".compact.json"), {"session_id": sid, "at": now, "text": (
+            "The context was just compacted (%s, %s). Where the session was, from git and the task files, in case "
+            "the summary left it out:\n%s" % (trigger[:20], now, "\n".join(kept)))})
+
+
 def start(root, payload, now=None):
     """The draft to show (once), or None. Records this session's start."""
     if conf(root).get("SESSION_HANDOFF", "on") == "off":
@@ -244,6 +267,11 @@ def start(root, payload, now=None):
     if last and not last.get("shown") and last.get("text"):
         text = last["text"]
         _write(os.path.join(d, "last.json"), dict(last, shown=True))
+    if isinstance(payload, dict) and payload.get("source") == "compact":
+        saved = _read(os.path.join(d, sid + ".compact.json"))
+        if saved and saved.get("text"):
+            os.remove(os.path.join(d, sid + ".compact.json"))
+            text = saved["text"] + ("\n\n" + text if text else "")
     mine = os.path.join(d, sid + ".start.json")
     if not os.path.exists(mine):  # a resumed or compacted session keeps its first start
         _write(mine, {"session_id": sid, "started_at": now, "memory": memory_hash(root), "tasks": task_hashes(root)})
@@ -259,6 +287,8 @@ def main(argv):
         payload = {}
     if len(argv) > 1 and argv[1] == "end":
         end(root, payload)
+    elif len(argv) > 1 and argv[1] == "compact":
+        compact(root, payload)
     elif len(argv) > 1 and argv[1] == "start":
         text = start(root, payload)
         if text:

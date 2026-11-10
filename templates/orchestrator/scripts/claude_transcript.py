@@ -59,3 +59,33 @@ def usage(path):
             m[name] += u[k]
         m["requests"] += 1
     return models, None
+
+
+def context_tokens(path):
+    """(the context size of the last request, None), or (None, reason): its input, cache read and cache write
+    tokens, which is what the session carried into a compaction. Same strictness as usage()."""
+    try:
+        f = open(path, encoding="utf-8")
+    except (OSError, TypeError):
+        return None, "transcript not readable"
+    last = None
+    with f:
+        for n, raw in enumerate(f, 1):
+            if not raw.strip():
+                continue
+            try:
+                row = json.loads(raw)
+            except ValueError:
+                return None, "unrecognized transcript line %d" % n
+            if not isinstance(row, dict) or row.get("type") != "assistant":
+                continue
+            msg = row.get("message")
+            if not isinstance(msg, dict) or msg.get("model") == "<synthetic>":
+                continue
+            u = msg.get("usage")
+            if not isinstance(u, dict) or not all(isinstance(u.get(k), int) for k in _FIELDS):
+                return None, "unrecognized usage on line %d" % n
+            last = u
+    if last is None:
+        return None, "no requests in transcript"
+    return last["input_tokens"] + last["cache_read_input_tokens"] + last["cache_creation_input_tokens"], None

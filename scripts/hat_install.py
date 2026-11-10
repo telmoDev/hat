@@ -38,6 +38,8 @@ HOOKS = [
     ("SessionStart", None, "telemetry", "hook claude", 10),
     ("SessionEnd", None, "telemetry", "hook claude", 5),
     ("SessionEnd", None, "session-handoff", "end", 5),
+    ("PreCompact", None, "session-handoff", "compact", 5),
+    ("PreCompact", None, "telemetry", "hook claude", 5),
     ("SubagentStart", None, "telemetry", "hook claude", 5),
     ("SubagentStop", None, "telemetry", "hook claude", 5),
     ("PostToolUse", "Agent|Task", "telemetry", "hook claude", 5),

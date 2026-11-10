@@ -46,6 +46,7 @@ with milliseconds), `run_id`, optional `task_id` and `invocation_id`, and `paylo
 | `usage.reported` | yes | `model`, `input_tokens`, `output_tokens`, `cache_read_tokens`, `cache_write_tokens`, `source`, `parser_version`, `requests`, `reason` |
 | `criterion.verified` | no | `criterion_code`, `status`, `verification_method` |
 | `execution.blocked` | no | `reason` |
+| `session.compacted` | no | `trigger`, `context_tokens`, `source`, `reason` |
 
 Validation rejects, naming the rule and never quoting a value: an unknown type or key, a non-scalar value, a
 string over 200 characters, a negative or non-integer count (`*_tokens`, `duration_ms`, `requests`,
@@ -92,6 +93,7 @@ because `claude -p` kills async hooks before they finish.
 | `PostToolUseFailure` (Agent) | `agent.failed` for `claude:tool:<id>`: category (`error` or `interrupt`) and duration only |
 | `SubagentStop` | `agent.completed`; queues the transcript, read once 2 s old (the transcript lags the hook) |
 | `SessionEnd` | `run.completed`, main `agent.completed`, reads the queued transcripts, criteria sync |
+| `PreCompact` | `session.compacted`: `trigger` (`manual` or `auto`) and the context the session carried into it (`context_tokens`: the last request's input, cache read and cache write, from the transcript), or `unavailable` with its reason. Payload checked live on Claude Code 2.1.311 |
 
 Transcripts (`claude_transcript.py`, `claude-transcript/2`) are a private format, so the parser is strict: any
 line or usage shape it doesn't know makes the whole invocation `unavailable` instead of a partial sum; a request
