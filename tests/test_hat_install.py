@@ -120,6 +120,15 @@ class Install(unittest.TestCase):
         self.assertEqual({k: v for k, v in snapshot(self.claude).items() if k != "settings.json"}, before)
         self.assertFalse(os.path.exists(os.path.join(self.home, ".agents", "skills", "sync-memory")))
 
+    def test_uninstall_keeps_crlf_files_byte_for_byte(self):
+        os.makedirs(self.claude)
+        with open(os.path.join(self.claude, "CLAUDE.md"), "wb") as f:
+            f.write(b"# My own notes\r\nsecond line\r\n")
+        self.run_install("install")
+        self.run_install("uninstall")
+        with open(os.path.join(self.claude, "CLAUDE.md"), "rb") as f:
+            self.assertEqual(f.read(), b"# My own notes\r\nsecond line\r\n")
+
     def test_it_never_overwrites_what_is_not_its_own(self):
         self.user_setup()
         with open(os.path.join(self.claude, "agents", "hat-dev.md"), "w") as f:

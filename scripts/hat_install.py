@@ -59,7 +59,7 @@ def command(hook, args):
 
 def read(path):
     try:
-        with open(path, encoding="utf-8") as f:
+        with open(path, encoding="utf-8", newline="") as f:  # bytes as they are: CRLF stays CRLF
             return f.read()
     except FileNotFoundError:
         return None
@@ -67,7 +67,7 @@ def read(path):
 
 def write(path, text):
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path + ".hat-tmp", "w", encoding="utf-8", newline="\n") as f:
+    with open(path + ".hat-tmp", "w", encoding="utf-8", newline="") as f:
         f.write(text)
     os.replace(path + ".hat-tmp", path)
 
