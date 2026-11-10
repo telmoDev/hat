@@ -19,7 +19,7 @@ Paste this into each brief, filled in:
 ```
 Project root: <root>. Repo: <root>/<repo>. Branch: <branch>, base origin/<base>. Ticket: <ticket>.
 Spec the diff implements: <spec>  (none given: find the spec and the decisions the diff cites; AGENTS.md says where they live)
-Outcome the diff must meet: <outcome>  (none given: report item 8 as failed)
+Outcome the diff must meet: <outcome>  (none given: report the checklist's *Outcome met* item as failed)
 The checklist is <state>/checklist.md (or <hat>/templates/orchestrator/pre-pr-checklist.md). Start from
 `git -C <root>/<repo> diff --stat origin/<base>...<branch>`, then open only the files that carry risk for your items.
 Read-only: never edit, commit, branch or push. Review as the human reviewer would: report only defects that
