@@ -1,5 +1,6 @@
 """Tests for T9: scripts/update.sh on a workspace scaffolded by the real v0.7.0 release, with user changes.
-Each test builds a release of the current tree (a local clone tagged v0.8.0) and a v0.7.0 workspace.
+Each test builds a release of the current tree (a local clone tagged with the next minor version, NEXT) and a
+v0.7.0 workspace.
   python3 -m unittest discover -s tests
 Needs git and bash (Git Bash on Windows), like tests/smoke.sh.
 """
@@ -15,9 +16,13 @@ import tarfile
 import tempfile
 import time
 import unittest
+from unittest import mock
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(HERE)
+with open(os.path.join(REPO, "VERSION")) as _f:
+    _major, _minor, _ = _f.read().strip().split(".")
+NEXT = "%s.%d.0" % (_major, int(_minor) + 1)  # a version never released, so its tag never exists yet
 BASH = shutil.which("bash")
 sys.path.insert(0, os.path.join(REPO, "templates", "orchestrator", "scripts"))
 import telemetry as t  # noqa: E402
@@ -28,7 +33,7 @@ def git(*args, cwd=None, env=None):
 
 
 class Workspace(unittest.TestCase):
-    """A v0.7.0 workspace with the user's own changes, and a v0.8.0 release of the current tree."""
+    """A v0.7.0 workspace with the user's own changes, and a NEXT release of the current tree."""
 
     @classmethod
     def setUpClass(cls):
@@ -42,7 +47,7 @@ class Workspace(unittest.TestCase):
         old = os.path.join(cls.tmp, "skill-0.7.0")
         tarfile.open(fileobj=io.BytesIO(git("archive", "v0.7.0", cwd=REPO))).extractall(old)
         cls.old = old
-        # A release of the current tree: a clone with the working tree's files, tagged v0.8.0.
+        # A release of the current tree: a clone with the working tree's files, tagged vNEXT.
         skill = os.path.join(cls.tmp, "skill")
         git("clone", "-q", REPO, skill, env=cls.env)
         for d in ("templates", "scripts"):
@@ -51,10 +56,10 @@ class Workspace(unittest.TestCase):
                             ignore=shutil.ignore_patterns("__pycache__"))
         shutil.copy(os.path.join(REPO, "CHANGELOG.md"), skill)
         with open(os.path.join(skill, "VERSION"), "w") as f:
-            f.write("0.8.0\n")
+            f.write(NEXT + "\n")
         git("add", "-A", cwd=skill, env=cls.env)
-        git("commit", "-qm", "release 0.8.0", "--allow-empty", cwd=skill, env=cls.env)
-        git("tag", "v0.8.0", cwd=skill, env=cls.env)
+        git("commit", "-qm", "release " + NEXT, "--allow-empty", cwd=skill, env=cls.env)
+        git("tag", "v" + NEXT, cwd=skill, env=cls.env)
         cls.skill = skill
 
     @classmethod
@@ -124,7 +129,7 @@ class Workspace(unittest.TestCase):
     def dev_skill(self):
         skill = os.path.join(tempfile.mkdtemp(dir=self.tmp), "skill")
         git("clone", "-q", self.skill, skill, env=self.env)
-        git("tag", "-d", "v0.8.0", cwd=skill, env=self.env)  # the same tree, before its release
+        git("tag", "-d", "v" + NEXT, cwd=skill, env=self.env)  # the same tree, before its release
         return skill
 
     def release(self, skill, *changes):
@@ -133,7 +138,7 @@ class Workspace(unittest.TestCase):
                 f.write("# changed after the --dev snapshot\n")
         if changes:
             git("commit", "-qam", "a later change", cwd=skill, env=self.env)
-        git("tag", "v0.8.0", cwd=skill, env=self.env)
+        git("tag", "v" + NEXT, cwd=skill, env=self.env)
 
     def commit(self):
         git("add", "-A", cwd=self.ws, env=self.env)
@@ -219,7 +224,7 @@ class Update(Workspace):
         conf = self.read(".orchestrator/orchestrator.conf")
         self.assertIn('TELEMETRY="on"', conf)
         self.assertIn('TELEMETRY_TRANSCRIPTS="on"', conf)
-        self.assertIn('TEMPLATE_VERSION="0.8.0"', conf)
+        self.assertIn('TEMPLATE_VERSION="%s"' % NEXT, conf)
         self.assertIn("Workspaces", out)  # the manual steps of the CHANGELOG are shown
 
     def test_telemetry_works_after_the_update(self):
@@ -315,7 +320,7 @@ class Partial(Workspace):
         self.commit()
         code, out = self.update()
         self.assertEqual(code, 0, out)
-        self.assertIn('TEMPLATE_VERSION="0.8.0"', self.read(".orchestrator/orchestrator.conf"))
+        self.assertIn('TEMPLATE_VERSION="%s"' % NEXT, self.read(".orchestrator/orchestrator.conf"))
 
     def test_an_unreleased_skill_updates_without_claiming_a_version(self):
         code, out = self.update("--dev", skill=REPO)
@@ -339,8 +344,8 @@ class DevToRelease(Workspace):
         self.release(skill)
         code, out = self.update(skill=skill)
         self.assertEqual(code, 0, out)
-        self.assertIn('TEMPLATE_VERSION="0.8.0"', self.read(".orchestrator/orchestrator.conf"))
-        self.assertNotIn("new    ", out)  # nothing kept as changed: the files already are v0.8.0's
+        self.assertIn('TEMPLATE_VERSION="%s"' % NEXT, self.read(".orchestrator/orchestrator.conf"))
+        self.assertNotIn("new    ", out)  # nothing kept as changed: the files already are NEXT's
         news = [f for d, _, fs in os.walk(self.path(".orchestrator")) for f in fs if f.endswith(".new")]
         self.assertEqual(news, ["push-pr.sh.new"])  # only the user's own change, from the first run
 
@@ -352,7 +357,7 @@ class DevToRelease(Workspace):
         before = self.read(".orchestrator/scripts/telemetry.py")
         code, out = self.update(skill=skill)
         self.assertEqual(code, 0, out)
-        # telemetry.py was written by --dev and changed again: it matches neither v0.7.0 nor v0.8.0, so it is
+        # telemetry.py was written by --dev and changed again: it matches neither v0.7.0 nor NEXT, so it is
         # treated as the user's and kept, with the release next to it.
         self.assertEqual(self.read(".orchestrator/scripts/telemetry.py"), before)
         self.assertTrue(self.read(".orchestrator/scripts/telemetry.py.new").endswith(
@@ -360,7 +365,7 @@ class DevToRelease(Workspace):
         # memory-state.sh was still v0.7.0's (the snapshot didn't change it): updated as usual.
         self.assertTrue(self.read(".orchestrator/scripts/memory-state.sh").endswith(
             "# changed after the --dev snapshot\n"))
-        self.assertIn('TEMPLATE_VERSION="0.8.0"', self.read(".orchestrator/orchestrator.conf"))
+        self.assertIn('TEMPLATE_VERSION="%s"' % NEXT, self.read(".orchestrator/orchestrator.conf"))
 
 
 class KeepMine(Workspace):
@@ -405,7 +410,18 @@ class Changelog(unittest.TestCase):
         self.assertIn("### v0.6.0", steps)
         self.assertNotIn("### v0.5.1", steps)
         self.assertNotIn("### Unreleased", steps)
-        self.assertIn("### Unreleased", "\n".join(update.changelog_steps("0.7.0", "0.7.0", False)))
+
+    def test_an_unreleased_skill_also_lists_unreleased_steps(self):
+        sys.path.insert(0, os.path.join(REPO, "scripts"))
+        import update
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp, True)
+        with open(os.path.join(tmp, "CHANGELOG.md"), "w", encoding="utf-8") as f:
+            f.write("# Changelog\n\n## Unreleased\n\n- a change\n  **Workspaces:** do this.\n\n"
+                    "## v0.7.0 — 2026-10-27\n\n- older\n\n**Workspaces:** nothing.\n")
+        with mock.patch.object(update, "HERE", tmp):
+            self.assertIn("### Unreleased", "\n".join(update.changelog_steps("0.7.0", "0.7.0", False)))
+            self.assertNotIn("### Unreleased", "\n".join(update.changelog_steps("0.6.0", "0.7.0", True)))
 
 
 class NewerStore(unittest.TestCase):
