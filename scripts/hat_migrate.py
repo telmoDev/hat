@@ -2,6 +2,7 @@
 """hat migrate (G6a, docs/meta-harness/global-install.md §8): move a workspace with the per-project layer to the
 global install, saving everything that is the project's own first.
   python3 scripts/hat.py migrate <workspace> [--dry-run]
+  python3 scripts/hat.py migrate <workspace> --cleanup    after a migration: remove hat's old layer, one commit
 Each layer file is compared with the template of the workspace's TEMPLATE_VERSION (read from this clone's tag),
 placeholders filled at setup counting as wildcards. What equals the template is hat's. What differs is the
 project's: the adapted paragraphs of AGENTS.md (and its project sections, always) go verbatim to rules.md, other
@@ -270,11 +271,125 @@ def migrate(ws, dry):
     return 0
 
 
+HAT_AGENTS = ("explorer.md", "architect.md")  # and every <repo>-dev.md, generated from the developer template
+
+
+def strip_hooks(path):
+    """Drop the hooks that run the old layer's scripts (.orchestrator/hooks/); keep every other setting. Returns
+    True when the file changed; removes it when nothing is left."""
+    if not os.path.isfile(path):
+        return False
+    data = json.loads(read(path))
+    hooks = data.get("hooks", {})
+    changed = False
+    for event in list(hooks):
+        groups = []
+        for g in hooks[event]:
+            kept = [h for h in g.get("hooks", []) if ".orchestrator/hooks/" not in h.get("command", "")]
+            changed = changed or len(kept) != len(g.get("hooks", []))
+            if kept:
+                groups.append(dict(g, hooks=kept))
+        if groups:
+            hooks[event] = groups
+        else:
+            del hooks[event]
+    if not hooks:
+        data.pop("hooks", None)
+    if not changed:
+        return False
+    rest = {k: v for k, v in data.items() if k != "description"}
+    if not rest:
+        os.remove(path)
+    else:
+        with open(path, "w", encoding="utf-8", newline="\n") as f:
+            f.write(json.dumps(data, indent=2) + "\n")
+    return True
+
+
+def cleanup(ws):
+    ws = hat.norm(ws)
+    hit = hat.resolve(ws)
+    info = os.path.join(hat.state(hit[0]), "migrated.json") if hit and hit[1] == ws else None
+    if not info or not os.path.isfile(info):
+        return fail("%s is not migrated: run hat migrate %s first" % (ws, ws))
+    if os.path.isdir(os.path.join(ws, ".git")):
+        dirty = subprocess.run(["git", "-C", ws, "status", "--porcelain", "--"]
+                               + [p for p in LAYER if os.path.exists(os.path.join(ws, p))],
+                               capture_output=True, encoding="utf-8").stdout.strip()
+        if dirty:
+            return fail("uncommitted changes in the orchestration layer: commit them first\n" + dirty)
+    copy = os.path.join(hat.state(hit[0]), "migrated-layer")
+    now = {r for r in layer_files(ws) if not generated(ws, r) and not r.startswith(SKIP[:2])}
+    then = {os.path.relpath(os.path.join(d, f), copy).replace("\\", "/") for d, _, fs in os.walk(copy) for f in fs}
+    then = {r for r in then if not generated(copy, r) and not r.startswith(SKIP[:2])}
+    changed = sorted(r for r in now ^ then) + sorted(
+        r for r in now & then if read(os.path.join(ws, *r.split("/"))) != read(os.path.join(copy, *r.split("/"))))
+    if changed:
+        return fail("the layer changed since the migration, so hat's copy is out of date (%s). Nothing removed."
+                    % ", ".join(changed[:5]))
+    removed = []
+    for top in ("AGENTS.md", "CLAUDE.md", ".orchestrator", "memory", "odd"):
+        p = os.path.join(ws, top)
+        if os.path.isdir(p):
+            shutil.rmtree(p)
+            removed.append(top)
+        elif os.path.isfile(p):
+            os.remove(p)
+            removed.append(top)
+    skills = set(os.listdir(os.path.join(CLONE, "templates", "skills")))
+    for base in (".agents/skills", ".claude/skills"):
+        for name in sorted(skills):
+            p = os.path.join(ws, *base.split("/"), name)
+            if os.path.isdir(p):
+                shutil.rmtree(p)
+                removed.append("%s/%s" % (base, name))
+    for rel in [".claude/workflows/pre-pr-review.js"] + [".claude/agents/" + n for n in HAT_AGENTS]:
+        if os.path.isfile(os.path.join(ws, *rel.split("/"))):
+            os.remove(os.path.join(ws, *rel.split("/")))
+            removed.append(rel)
+    for folder, ext in ((".claude/agents", ".md"), (".codex/agents", ".toml")):
+        d = os.path.join(ws, *folder.split("/"))
+        for name in sorted(os.listdir(d)) if os.path.isdir(d) else []:
+            stem = name[: -len(ext)]
+            if name.endswith(ext) and (stem in ("explorer", "architect") or re.search(r"[-_]dev$", stem)):
+                os.remove(os.path.join(d, name))
+                removed.append("%s/%s" % (folder, name))
+    for rel in (".claude/settings.json", ".codex/hooks.json"):
+        if strip_hooks(os.path.join(ws, *rel.split("/"))):
+            removed.append(rel + " (hat's hooks)")
+    for folder in (".claude/workflows", ".claude/agents", ".claude/skills", ".claude", ".codex/agents", ".codex",
+                   ".agents/skills", ".agents"):
+        d = os.path.join(ws, *folder.split("/"))
+        if os.path.isdir(d) and not os.listdir(d):
+            os.rmdir(d)
+    with open(info, encoding="utf-8") as f:
+        data = json.load(f)
+    data["cleaned_at"] = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    with open(info, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
+    hat.record("%s: old layer cleaned up in %s" % (hit[0], ws), "projects/" + hit[0])
+    if os.path.isdir(os.path.join(ws, ".git")):
+        subprocess.run(["git", "-C", ws, "add", "-A", "--"] + [p for p in LAYER], capture_output=True)
+        p = subprocess.run(["git", "-C", ws, "commit", "-q", "-m",
+                            "chore: move the orchestration layer to hat (%s)" % hat.norm(hat.state(hit[0]))],
+                           capture_output=True, encoding="utf-8")
+        note = "one commit in %s (git revert undoes it)" % ws if p.returncode == 0 else \
+            "not committed: " + (p.stderr or p.stdout).strip()[:200]
+    else:
+        note = "the workspace isn't a git repo: hat's copy is in %s" % hat.norm(copy)
+    print("hat migrate --cleanup: removed %s; %s." % (", ".join(removed), note))
+    print("The project now runs on hat: new sessions get its header, memory and rules from %s."
+          % hat.norm(hat.state(hit[0])))
+    return 0
+
+
 def main(args):
-    rest = [a for a in args if a != "--dry-run"]
+    rest = [a for a in args if a not in ("--dry-run", "--cleanup")]
     if len(rest) != 1:
         print(__doc__.strip(), file=sys.stderr)
         return 2
+    if "--cleanup" in args:
+        return cleanup(os.path.abspath(rest[0]))
     return migrate(os.path.abspath(rest[0]), "--dry-run" in args)
 
 

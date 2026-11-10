@@ -39,7 +39,7 @@ def snapshot(root):
     return out
 
 
-class Migrate(unittest.TestCase):
+class Workspace(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.tmp = os.path.realpath(tempfile.mkdtemp())
@@ -116,6 +116,9 @@ class Migrate(unittest.TestCase):
         with open(os.path.join(self.state(), *rel.split("/")), encoding="utf-8") as f:
             return f.read()
 
+
+
+class Migrate(Workspace):
     def test_dry_run_writes_nothing(self):
         code, out = self.migrate("--dry-run")
         self.assertEqual(code, 0, out)
@@ -188,7 +191,7 @@ class Migrate(unittest.TestCase):
         self.assertIn("not a workspace", p.stdout + p.stderr)
 
 
-class Cleanup(Migrate):
+class Cleanup(Workspace):
     """--cleanup, after a verified migration: one commit removes hat's layer files and nothing else."""
 
     def tearDown(self):
@@ -246,7 +249,7 @@ class Cleanup(Migrate):
         self.assertIn("hat project", header)
 
     def test_session_start_offers(self):
-        self.assertIn("hat migrate", self.hook("context", self.ws).stdout)  # an old layer, not registered
+        self.assertIn("hat.py migrate", self.hook("context", self.ws).stdout)  # an old layer, not registered
         self.migrate()
         self.assertIn("--cleanup", self.hook("context", self.ws).stdout)  # migrated, old layer still there
         plain = os.path.join(self.ws + "-home", "plain")

@@ -267,6 +267,38 @@ def doctor():
     return 1 if problems else 0
 
 
+def offer(folder):
+    """One line for the session start where hat isn't running yet, or None: a workspace with the old layer
+    (migrate it, or clean it up once migrated), an unregistered git repo (register it, decision G-D1)."""
+    folder, hat_py = norm(folder), norm(os.path.join(CLONE, "scripts", "hat.py"))
+    layer, d = None, folder
+    while True:
+        if os.path.isfile(os.path.join(d, ".orchestrator", "orchestrator.conf")):
+            layer = d
+            break
+        parent = os.path.dirname(d)
+        if parent == d:
+            break
+        d = parent
+    hit = resolve(folder)
+    if layer and hit and hit[1] == layer:
+        if os.path.isfile(os.path.join(state(hit[0]), "migrated.json")):
+            return ("hat: this workspace is migrated to hat, but its old layer still runs. Offer the user, in one "
+                    "line, to clean it up (one commit, git can undo it): python3 %s migrate %s --cleanup"
+                    % (hat_py, layer))
+        return "hat: this registered workspace still has its old layer. To move it: python3 %s migrate %s --dry-run" \
+            % (hat_py, layer)
+    if layer and not hit:
+        return ("hat: this workspace has hat's old per-project layer. If the user wants it on the global install, "
+                "keeping its own rules: python3 %s migrate %s --dry-run" % (hat_py, layer))
+    if not hit:
+        p = subprocess.run(["git", "-C", folder, "rev-parse", "--show-toplevel"], capture_output=True,
+                           encoding="utf-8")
+        if p.returncode == 0:
+            return "hat isn't active in this repo. To use it here, from its root: python3 %s project add" % hat_py
+    return None
+
+
 def fail(msg):
     print("hat: " + msg, file=sys.stderr)
     return 1
@@ -356,6 +388,15 @@ def main(argv):
         return status()
     if args == ["doctor"]:
         return doctor()
+    if args == ["offer-payload"]:
+        try:
+            payload = json.loads(sys.stdin.read() or "{}")
+        except ValueError:
+            return 0
+        text = offer(payload.get("cwd") or os.getcwd()) if isinstance(payload, dict) else None
+        if text:
+            print(json.dumps({"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": text}}))
+        return 0
     if args[:1] == ["context"] and len(args) <= 2:
         text = context(args[1] if len(args) == 2 else os.getcwd())
         if text:
