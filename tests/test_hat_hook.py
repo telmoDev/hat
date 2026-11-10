@@ -94,6 +94,21 @@ class Hook(Base):
                            encoding="utf-8", env=self.env, timeout=30)
         self.assertEqual((p.returncode, p.stdout), (0, ""))
 
+    def test_a_whole_session_writes_nothing_inside_the_project(self):
+        self.add()
+        with open(os.path.join(self.state, "config"), "w") as f:
+            f.write('REPOS="."\n')
+        start = self.start(self.root)
+        for hook, args in (("context", ()), ("session-memory", ()), ("decision-index", ()),
+                           ("session-handoff", ("start",)), ("telemetry", ("hook", "claude"))):
+            self.hook(hook, start, *args)
+        end = dict(start, hook_event_name="SessionEnd", reason="exit")
+        self.hook("telemetry", end, "hook", "claude")
+        self.hook("session-handoff", end, "end")
+        status = subprocess.run(["git", "-C", self.root, "status", "--porcelain", "--ignored"], capture_output=True,
+                                encoding="utf-8").stdout
+        self.assertEqual(status, "")
+
     def test_the_session_start_header_names_the_project_guide_and_rules(self):
         self.add()
         with open(os.path.join(self.state, "config"), "w") as f:
@@ -127,6 +142,37 @@ class Home(Base):
         code, out, _ = self.hat("commit", "again")
         self.assertEqual(code, 0)
         self.assertIn("nothing to commit", out)
+
+    def test_remove_unregisters_and_keeps_the_state(self):
+        self.add()
+        os.makedirs(os.path.join(self.state, "memory"))
+        with open(os.path.join(self.state, "memory", "NEXT_STEPS.md"), "w") as f:
+            f.write("# Next steps\n")
+        code, out, err = self.hat("project", "remove", self.pid)
+        self.assertEqual(code, 0, err)
+        self.assertEqual(self.hat("resolve", self.root)[0], 1)
+        self.assertTrue(os.path.isfile(os.path.join(self.state, "memory", "NEXT_STEPS.md")))  # never deleted
+        self.assertIn("remove project " + self.pid, self.git_home("log", "-1", "--format=%s"))
+        self.assertEqual(self.git_home("status", "--porcelain", "projects.toml"), "")
+        self.assertEqual(self.hat("project", "remove", self.pid)[0], 1)
+
+    def test_the_installs_backup_and_manifest_stay_out_of_git(self):
+        self.add()
+        ignored = self.git_home("check-ignore", "backup/settings.json.1", "install.json")
+        self.assertEqual(len(ignored.split()), 2)
+
+    def test_an_older_home_gets_the_missing_ignore_lines(self):
+        self.add()
+        with open(os.path.join(self.home, ".gitignore"), "w") as f:
+            f.write("projects/*/telemetry.db*\n")
+        self.hat("project", "add", self.folder_named("other"))
+        with open(os.path.join(self.home, ".gitignore")) as f:
+            self.assertIn("install.json", f.read())
+
+    def folder_named(self, name):
+        path = os.path.join(self.tmp, name)
+        os.makedirs(path)
+        return path
 
     def test_commit_outside_a_project_is_refused(self):
         self.add()
