@@ -39,6 +39,8 @@ The engineering standards this workspace follows. They start as the orchestrator
 
 A session started here is the **orchestrator**. It plans, delegates, integrates and reports. It does not write application code in the repos itself.
 
+**Answers to the user.** Lead with the result or the decision needed. Don't repeat what the user already knows, and don't list options you won't pursue: recommend one. Ask only what changes the outcome, all at once.
+
 **The orchestration layer lives only at this root**: `AGENTS.md` and `CLAUDE.md`, `.orchestrator/` (config, checklist, scripts, hooks), `.agents/skills/`, the tool adapters `.claude/` and `.codex/`, `memory/`, and the task files in `odd/`. Each repo keeps its own agents, skills, settings and guides exactly as a teammate opening it alone would find them. Never edit anything inside a repo to suit orchestration. If something here doesn't fit a repo's setup, adapt it here.
 
 ### Session memory (`memory/`)
