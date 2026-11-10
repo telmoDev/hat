@@ -17,6 +17,14 @@ into the new version's section.
   check verified, Codex nothing yet. `doctor` says whether each runtime is installed and wired in the workspace
   (naming any missing hook). No network, no model calls, never starts a session; nothing in the flow uses it yet.
 
+- `knowledge.py validate|index` (meta-harness K1): OKF v0.2 knowledge bundles. `validate` checks OKF conformance
+  (permissive: unknown types, keys and broken links are never errors) plus provenance (`sources`), trust
+  (`generated`, `verified`, actors, ISO timestamps with an offset), lifecycle (`status`, `stale_after`), the
+  `x_scope` extension, log dates and secrets; v0.1 concepts pass with legacy warnings. `index` writes each
+  directory's `index.md` listing (by type, then subdirectories) inside a generated block, keeping hand-written text
+  and never touching concepts. Standard library only (PyYAML when installed). Checked on the four official OKF
+  sample bundles: 0 errors, both YAML readers agree on all 54 frontmatters. Nothing in the flow uses it yet.
+
 - Phase 1 review ([docs/meta-harness/phase-1-review.md](docs/meta-harness/phase-1-review.md)): hook latency, concurrency,
   privacy and the update path measured on copies of real workspaces. Two fixes: `errors.log` names an unknown
   payload key only when it looks like an identifier (free text in a key is never logged), and the session handoff
