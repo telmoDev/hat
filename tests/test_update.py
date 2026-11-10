@@ -170,6 +170,31 @@ class Update(Workspace):
         self.assertIn("Needs your attention", out)
         self.assertIn(".orchestrator/scripts/push-pr.sh.new", out.split("Needs your attention")[1])
 
+    def test_a_skill_the_workspace_removed_is_not_recreated(self):
+        # A workspace may keep a standard in a repo's own copy and drop the root one; a skill new since the
+        # workspace's version is still created.
+        for d in (".agents", ".claude"):
+            shutil.rmtree(self.path(d + "/skills/design-patterns"))
+        self.commit()
+        code, out = self.update()
+        self.assertEqual(code, 0, out)
+        self.assertFalse(os.path.exists(self.path(".agents/skills/design-patterns")))
+        self.assertFalse(os.path.exists(self.path(".claude/skills/design-patterns")))
+        self.assertNotIn("design-patterns", out)
+        self.assertTrue(os.path.isfile(self.path(".agents/skills/orchestrator-metrics/SKILL.md")))
+
+    def test_a_new_copy_of_a_skill_stays_out_of_the_claude_copies(self):
+        self.edit(".agents/skills/sync-memory/SKILL.md", lambda s: s + "\nMy own rule.\n")
+        subprocess.run([BASH, ".orchestrator/scripts/sync-skills.sh"], cwd=self.ws, check=True, capture_output=True)
+        self.commit()
+        code, out = self.update()
+        self.assertEqual(code, 0, out)
+        self.assertTrue(os.path.isfile(self.path(".agents/skills/sync-memory/SKILL.md.new")))
+        self.assertFalse(os.path.exists(self.path(".claude/skills/sync-memory/SKILL.md.new")))
+        p = subprocess.run([BASH, ".orchestrator/scripts/sync-skills.sh", "--check"], cwd=self.ws,
+                           capture_output=True, encoding="utf-8")
+        self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+
     def test_new_files_config_and_version(self):
         code, out = self.update()
         self.assertEqual(code, 0, out)
