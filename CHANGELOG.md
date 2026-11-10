@@ -11,6 +11,13 @@ into the new version's section.
 
 ## Unreleased
 
+- `scripts/hat.py` (global install G1): hat's home `~/.hat/` (`HAT_HOME` overrides it) with its project registry
+  `projects.toml`. `hat project add [<root>]` registers a project (default: the git top level, or the folder for a
+  multi-repo workspace) and creates `projects/<id>/` for its state; `project list` and `project move <id> <root>`;
+  `hat resolve [<folder>]` prints the project a folder belongs to, or nothing, for the hooks to call in every
+  session. One root per project (nested roots refused); nothing is ever written inside a project. Nothing uses it
+  yet.
+
 ## v0.8.0 — 2026-11-10
 
 - **Known limits of this release.** Live on a real workspace: the update kept every user file, telemetry recorded
