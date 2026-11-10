@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Build the global install's guide from the per-workspace template (G4, docs/meta-harness/guide-split.md).
-  python3 scripts/build_guide.py           write guide/AGENTS.md, guide/rules.md and guide/agents/hat-*.md
+  python3 scripts/build_guide.py           write guide/AGENTS.md, guide/rules.md, guide/agents/ and guide/skills/
   python3 scripts/build_guide.py --check   exit 1 if either differs from what would be written
 templates/AGENTS.md stays the one source of the flow while both installs exist (v0.9.x): the common sections are
 copied with their paths rewritten for the global layout, the project's sections become the rules.md template.
@@ -159,6 +159,30 @@ AGENTS = {
     ]),
 }
 
+# The global skills, from the per-workspace ones: the same text with hat's paths.
+SKILL_SUBS = [
+    ("`.claude/workflows/pre-pr-review.js`", "the saved workflow of a per-project install"),
+    ("`{{ROOT}}/.orchestrator/pre-pr-checklist.md`", "`<state>/checklist.md` (or `<hat>/templates/orchestrator/pre-pr-checklist.md`)"),
+    ("{{ROOT}}/.orchestrator/pre-pr-checklist.md", "<state>/checklist.md (or <hat>/templates/orchestrator/pre-pr-checklist.md)"),
+    ("{{ROOT}}/.orchestrator/telemetry/telemetry.db", "<state>/telemetry.db"),
+    (".orchestrator/scripts/", "<hat>/templates/orchestrator/scripts/"),
+    ("`.orchestrator/orchestrator.conf`", "`<state>/config`"),
+    (".orchestrator/rates.json", "<hat>/templates/orchestrator/rates.json"),
+    ("{{ROOT}}/memory/", "<state>/memory/"),
+    ("`memory/PROJECT_STATE.md`", "`<state>/memory/PROJECT_STATE.md`"),
+    ("`odd/tasks/*.md`", "`<state>/tasks/*.md`"),
+    ("All commands run from the workspace root, `{{ROOT}}`.", "All commands run from the project root, `<root>`."),
+    ("Workspace root: {{ROOT}}.", "Project root: <root>."),
+    ("{{ROOT}}", "<root>"),
+    ("this workspace", "this project"),
+    ("workspace standards", "project standards"),
+    ("`Doc: odd/tasks/<feature>.md`", "`Doc: tasks/<feature>.md`"),
+    ("(AGENTS.md flow step 4), for tools without the saved workflow (Codex)", "(hat's guide, flow step 4)"),
+    (" Claude Code runs .claude/workflows/pre-pr-review.js instead.", ""),
+    ("architect subagents", "hat-architect subagents"),
+    ("one architect per finding", "one hat-architect per finding"),
+]
+
 RULES_HEAD = """# Project rules
 
 This project's own guidance, read after hat's guide (`<hat>/guide/AGENTS.md`); it wins over any default there.
@@ -210,6 +234,13 @@ def build():
         for old, new in subs + AGENT_COMMON:
             text = text.replace(old, new)
         out["agents/" + name] = text
+    skills = os.path.join(HERE, "templates", "skills")
+    for name in sorted(os.listdir(skills)):
+        with open(os.path.join(skills, name, "SKILL.md"), encoding="utf-8") as f:
+            text = f.read()
+        for old, new in SKILL_SUBS:
+            text = text.replace(old, new)
+        out["skills/%s/SKILL.md" % name] = text
     return out
 
 

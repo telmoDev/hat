@@ -11,6 +11,15 @@ into the new version's section.
 
 ## Unreleased
 
+- Global install G3: `bash install.sh --global` wires hat once, for every project: the hooks in
+  `~/.claude/settings.json` (through `scripts/hat-hook.sh`, acting only in registered projects), a pointer of
+  under 90 words in `~/.claude/CLAUDE.md` (and `~/.codex/AGENTS.md` when Codex is set up), the agents `hat-explorer`,
+  `hat-architect`, `hat-dev` in `~/.claude/agents/`, and the skills linked from `~/.claude/skills/` and
+  `~/.agents/skills/` to `guide/skills/` (global versions built from `templates/skills/`). Every other setting is
+  kept; `settings.json` is backed up in `~/.hat/backup/` first; a file that exists and isn't hat's stops it before
+  any change; compaction is only proposed. `--uninstall` removes exactly what it added (recorded in
+  `~/.hat/install.json`), `--check` reports what is missing.
+
 - Global install G2b: `scripts/hat-hook.sh <hook>`, the one entry the global hooks will call. It finds the project
   from the event's `cwd`; outside a registered project, or in one that still has its own layer, it does nothing;
   otherwise it runs the hook with the project's state. `hat context` prints the session-start header (project,

@@ -2,20 +2,28 @@
 # Install the orchestrator-setup skill for Claude Code (~/.claude/skills) and Codex (~/.agents/skills) by
 # linking both to this checkout, so a `git pull` here updates both tools.
 #   bash install.sh [--tools claude,codex] [--uninstall | --check]
+#   bash install.sh --global [--uninstall | --check]   hat for every project (scripts/hat_install.py)
 # --check: report, for each tool, whether the skill is linked to this checkout (exit 1 if not), and the prerequisites.
 # macOS and Linux get a symlink. Windows (Git Bash) gets a directory junction, which needs no admin rights
 # or developer mode. An existing directory that is not a link is never touched.
 set -euo pipefail
 src="$(cd "$(dirname "$0")" && pwd)"
-tools="claude,codex" uninstall=no check=no
+tools="claude,codex" uninstall=no check=no global=no
 while [ $# -gt 0 ]; do
   case "$1" in
     --tools) tools="${2:?--tools needs claude, codex or claude,codex}"; shift 2 ;;
     --uninstall) uninstall=yes; shift ;;
     --check) check=yes; shift ;;
-    *) echo "usage: bash install.sh [--tools claude,codex] [--uninstall | --check]" >&2; exit 2 ;;
+    --global) global=yes; shift ;;
+    *) echo "usage: bash install.sh [--tools claude,codex] [--uninstall | --check] | --global [--uninstall | --check]" >&2; exit 2 ;;
   esac
 done
+if [ $global = yes ]; then
+  py=""; for c in python3 python "py -3"; do $c -c 'import sys; sys.exit(sys.version_info < (3, 8))' >/dev/null 2>&1 && { py=$c; break; }; done
+  [ -n "$py" ] || { echo "install: Python 3.8+ not found (python3, python or py -3)" >&2; exit 2; }
+  action=install; [ $uninstall = yes ] && action=uninstall; [ $check = yes ] && action=check
+  exec $py "$src/scripts/hat_install.py" "$action"
+fi
 windows=no; case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) windows=yes ;; esac
 winpath() { (cd "$1" && pwd -W) | sed 's#/#\\#g'; }
 
