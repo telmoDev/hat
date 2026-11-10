@@ -11,6 +11,12 @@ into the new version's section.
 
 ## Unreleased
 
+- Global install G7: `hat status` shows every registered project apart: whether it runs on hat or still has its
+  own layer (or its root is gone), its resume point, its active task files with their `Next:`, and its last
+  session from its telemetry. `hat doctor` checks this machine: Python, `claude`, the global install (what is
+  missing), hat's home as a git repo (and uncommitted changes), each project's root; exit 1 on a problem. Both
+  read only.
+
 - From the first live run of the global install: `hat project remove <id>` (unregisters; the project's state stays
   in the home, never deleted); hat's home keeps `backup/` (settings may hold tokens) and `install.json` out of
   git, and an older home gets the missing ignore lines; a commit no longer fails on a path that was never
