@@ -11,6 +11,8 @@ into the new version's section.
 
 ## Unreleased
 
+## v0.8.0 — 2026-11-10
+
 - **Known limits of this release.** Live on a real workspace: the update kept every user file, telemetry recorded
   main-session and agent usage with full coverage (hooks p95 33 ms, no errors), and a synced session left no
   handoff draft. Not yet seen live: the draft after a session that ends *without* `sync-memory` (covered by
