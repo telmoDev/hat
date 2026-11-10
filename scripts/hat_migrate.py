@@ -1,0 +1,282 @@
+#!/usr/bin/env python3
+"""hat migrate (G6a, docs/meta-harness/global-install.md §8): move a workspace with the per-project layer to the
+global install, saving everything that is the project's own first.
+  python3 scripts/hat.py migrate <workspace> [--dry-run]
+Each layer file is compared with the template of the workspace's TEMPLATE_VERSION (read from this clone's tag),
+placeholders filled at setup counting as wildcards. What equals the template is hat's. What differs is the
+project's: the adapted paragraphs of AGENTS.md (and its project sections, always) go verbatim to rules.md, other
+changed or added layer files to overrides/, its checklist to checklist.md. memory/, odd/tasks/, the conf, the
+telemetry store and the handoff state are copied as they are, and the whole layer to migrated-layer/ (git-ignored:
+it may hold local settings). A check confirms every project-specific paragraph is saved before anything is
+registered; one missing stops the migration. The workspace itself is never changed: its own layer keeps running
+until it is cleaned up (G6b), and the global hooks leave it alone meanwhile. Standard library only.
+"""
+import datetime
+import json
+import os
+import re
+import shutil
+import sqlite3
+import subprocess
+import sys
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
+import hat  # noqa: E402
+
+CLONE = os.path.dirname(HERE)
+LAYER = ["AGENTS.md", "CLAUDE.md", ".orchestrator", ".agents", ".claude", ".codex", "memory", "odd"]
+PROJECT_SECTIONS = ("Layout", "Commands", "Repo guides", "How the repos connect", "Workspace rules")
+COPIED = (".orchestrator/orchestrator.conf", ".orchestrator/pre-pr-checklist.md")  # saved as config / checklist.md
+SKIP = (".orchestrator/telemetry/", ".orchestrator/tmp/", "memory/", "odd/tasks/")  # copied as state, not overrides
+
+
+def fail(msg):
+    print("hat migrate: " + msg, file=sys.stderr)
+    return 1
+
+
+def versions_since(version):
+    """The workspace's release, every later one, and this clone's current templates ("HEAD"): a file equal to any
+    of them is hat's (an update, or update --dev, may have brought a later one)."""
+    tags = subprocess.run(["git", "-C", CLONE, "tag", "--list", "v*"], capture_output=True, encoding="utf-8").stdout
+    key = lambda v: tuple(int(x) for x in v.split("."))
+    later = sorted((t[1:] for t in tags.split() if re.fullmatch(r"v\d+\.\d+\.\d+", t)), key=key)
+    return [v for v in later if key(v) >= key(version)] + ["HEAD"]
+
+
+def at_version(version, rel):
+    if version == "HEAD":
+        path = os.path.join(CLONE, "templates", *rel.split("/"))
+        return read(path) if os.path.isfile(path) else None
+    p = subprocess.run(["git", "-C", CLONE, "show", "v%s:templates/%s" % (version, rel)], capture_output=True,
+                       encoding="utf-8", errors="replace")
+    return p.stdout if p.returncode == 0 else None
+
+
+def pattern(template):
+    """A template text as a regex: placeholders filled at setup ({{X}}) match anything."""
+    parts = re.split(r"\{\{[A-Z_]+\}\}", template.strip())
+    return re.compile(r"(?s)" + r".*?".join(re.escape(p) for p in parts) + r"\Z")
+
+
+def paragraphs(text):
+    return [p for p in re.split(r"\n\s*\n", text.replace("\r\n", "\n")) if p.strip()]
+
+
+def sections(text):
+    """[(heading or None, body)] split at ## and ### headings."""
+    out = []
+    for part in re.split(r"(?m)^(?=#{2,3} )", text.replace("\r\n", "\n")):
+        m = re.match(r"#{2,3} (.+)\n", part)
+        out.append((m.group(1).strip() if m else None, part))
+    return out
+
+
+def counterpart(rel):
+    """The template a layer file was made from, or None for a file the user added."""
+    parts = rel.split("/")
+    if rel == "CLAUDE.md" or rel == "AGENTS.md":
+        return rel
+    if parts[0] == ".orchestrator" and len(parts) == 3 and parts[1] in ("scripts", "hooks"):
+        return "orchestrator/%s/%s" % (parts[1], parts[2])
+    if parts[0] in (".agents", ".claude") and len(parts) == 4 and parts[1] == "skills" and parts[3] == "SKILL.md":
+        return "skills/%s/SKILL.md" % parts[2]
+    if rel == ".claude/settings.json":
+        return "claude/settings.json"
+    if parts[0] == ".claude" and parts[1:2] == ["workflows"]:
+        return "claude/workflows/" + "/".join(parts[2:])
+    if parts[0] == ".claude" and parts[1:2] == ["agents"] and len(parts) == 3:
+        return "agents/%s" % ("developer.md" if parts[2].endswith("-dev.md") else parts[2])
+    if parts[0] == ".codex" and len(parts) == 2:
+        return "codex/" + parts[1]
+    if rel == ".orchestrator/rates.json":
+        return "orchestrator/rates.json"
+    if rel == "odd/README.md":
+        return "odd/README.md"
+    return None
+
+
+def generated(ws, rel):
+    """Files hat's scripts derive from others, or runtime leftovers: never the project's own text."""
+    parts = rel.split("/")
+    if "__pycache__" in parts or rel.endswith((".pyc", ".lock")) or rel == ".orchestrator/update-keep":
+        return True
+    if parts[:2] == [".claude", "skills"]:  # sync-skills.sh copies .agents/skills here
+        twin = os.path.join(ws, ".agents", "skills", *parts[2:])
+        return os.path.isfile(twin) and read(twin) == read(os.path.join(ws, *parts))
+    if parts[:2] == [".codex", "agents"] and rel.endswith(".toml"):  # agent-to-codex.py, from .claude/agents
+        return os.path.isfile(os.path.join(ws, ".claude", "agents", parts[2][:-5] + ".md"))
+    return False
+
+
+def layer_files(ws):
+    for top in LAYER:
+        p = os.path.join(ws, top)
+        if os.path.isfile(p):
+            yield top
+        for d, dirs, files in os.walk(p) if os.path.isdir(p) else []:
+            for name in sorted(files):
+                yield os.path.relpath(os.path.join(d, name), ws).replace("\\", "/")
+
+
+def read(path):
+    with open(path, encoding="utf-8", errors="replace", newline="") as f:
+        return f.read()
+
+
+def plan(ws, version):
+    """(rules text, {override rel: text}, checklist text or None, project paragraphs that must be saved)."""
+    guide = read(os.path.join(ws, "AGENTS.md")) if os.path.isfile(os.path.join(ws, "AGENTS.md")) else ""
+    template = at_version(version, "AGENTS.md") or ""
+    known = [pattern(p) for p in paragraphs(template)]
+    rules = ["# Project rules", "",
+             "Saved verbatim by `hat migrate` from the workspace's AGENTS.md (template v%s): its project sections, "
+             "and every paragraph that differs from the template. Review it with the user: what fits a config key "
+             "moves to `config`, the rest stays here as the project's rules." % version]
+    adapted, must = [], []
+    for heading, body in sections(guide):
+        if heading is None:
+            continue
+        if heading in PROJECT_SECTIONS:
+            rules += ["", body.rstrip("\n")]
+            must += paragraphs(body)
+            continue
+        own = [p for p in paragraphs(body)[1:] if not any(k.match(p.strip()) for k in known)]
+        if own:
+            adapted += ["", "### From › %s" % heading, ""] + ["\n\n".join(own)]
+            must += own
+    if adapted:
+        rules += ["", "## Adapted from hat's guide"] + adapted
+    overrides, checklist, since = {}, None, versions_since(version)
+    for rel in layer_files(ws):
+        if rel == "AGENTS.md" or rel in COPIED[:1] or rel.startswith(SKIP) or rel.endswith(".new") \
+                or generated(ws, rel):
+            continue
+        text = read(os.path.join(ws, *rel.split("/")))
+        tpl = counterpart(rel) if rel != COPIED[1] else "orchestrator/pre-pr-checklist.md"
+        body = text.replace("\r\n", "\n").strip()
+        refs = [at_version(v, tpl) for v in since] if tpl else []
+        if any(r is not None and pattern(r).match(body) for r in refs):
+            continue
+        if rel == COPIED[1]:
+            checklist = text
+        else:
+            overrides[rel] = text
+    return "\n".join(rules) + "\n", overrides, checklist, must
+
+
+def migrate(ws, dry):
+    ws = hat.norm(ws)
+    conf_path = os.path.join(ws, ".orchestrator", "orchestrator.conf")
+    conf = read(conf_path) if os.path.isfile(conf_path) else ""
+    m = re.search(r'^TEMPLATE_VERSION="?(\d+\.\d+\.\d+)"?', conf, re.M)
+    if not m:
+        return fail("%s is not a workspace with hat's per-project layer (no .orchestrator/orchestrator.conf with a "
+                    "TEMPLATE_VERSION)" % ws)
+    version = m.group(1)
+    if at_version(version, "AGENTS.md") is None:
+        return fail("no tag v%s in %s: git fetch --tags there first" % (version, CLONE))
+    if os.path.isdir(os.path.join(ws, ".git")):
+        dirty = subprocess.run(["git", "-C", ws, "status", "--porcelain", "--"]
+                               + [p for p in LAYER if os.path.exists(os.path.join(ws, p))],
+                               capture_output=True, encoding="utf-8").stdout.strip()
+        if dirty:
+            return fail("uncommitted changes in the orchestration layer: commit them first\n" + dirty)
+    hit = hat.resolve(ws)
+    if hit and hit[1] == ws and os.path.isfile(os.path.join(hat.state(hit[0]), "migrated.json")):
+        return fail("%s is already migrated (%s)" % (ws, hat.state(hit[0])))
+    if hit and hit[1] != ws:
+        return fail("%s is inside the registered project %s" % (ws, hit[0]))
+    rules, overrides, checklist, must = plan(ws, version)
+    missing = [p for p in must if p.strip() not in rules]
+    if missing:
+        return fail("verification failed, nothing written: %d project paragraph(s) not saved, first: %s"
+                    % (len(missing), missing[0].strip()[:80]))
+    pid = hit[0] if hit else hat.project_id(ws)
+    memory = sorted(f for f in os.listdir(os.path.join(ws, "memory")) if f.endswith(".md")) \
+        if os.path.isdir(os.path.join(ws, "memory")) else []
+    tasks_dir = os.path.join(ws, "odd", "tasks")
+    tasks = sorted(f for f in os.listdir(tasks_dir) if f.endswith(".md")) if os.path.isdir(tasks_dir) else []
+    db = os.path.join(ws, ".orchestrator", "telemetry", "telemetry.db")
+    print("hat migrate %s -> %s (template v%s)" % (ws, hat.norm(hat.state(pid)), version))
+    print("  config        from .orchestrator/orchestrator.conf")
+    print("  memory/       %d files · tasks/ %d files · telemetry %s" % (len(memory), len(tasks),
+                                                                        "yes" if os.path.isfile(db) else "none"))
+    print("  rules.md      %d project paragraphs, verbatim (review it with the user)" % len(must))
+    print("  overrides/    %s" % (", ".join(sorted(overrides)) or "none"))
+    print("  checklist.md  %s" % ("the workspace's own" if checklist else "hat's default"))
+    print("  migrated-layer/  a full copy of the layer")
+    if dry:
+        print("(dry run: nothing written)")
+        return 0
+    if not hit:
+        if hat.add(ws) != 0:
+            return 1
+    st = hat.state(pid)
+    stage = st + ".migrating"
+    shutil.rmtree(stage, ignore_errors=True)
+    try:
+        os.makedirs(stage)
+        shutil.copy2(conf_path, os.path.join(stage, "config"))
+        for sub, names, src in (("memory", memory, os.path.join(ws, "memory")), ("tasks", tasks, tasks_dir)):
+            os.makedirs(os.path.join(stage, sub))
+            for n in names:
+                shutil.copy2(os.path.join(src, n), os.path.join(stage, sub, n))
+        with open(os.path.join(stage, "rules.md"), "w", encoding="utf-8", newline="\n") as f:
+            f.write(rules)
+        if checklist:
+            with open(os.path.join(stage, "checklist.md"), "w", encoding="utf-8", newline="") as f:
+                f.write(checklist)
+        for rel, text in overrides.items():
+            p = os.path.join(stage, "overrides", *rel.split("/"))
+            os.makedirs(os.path.dirname(p), exist_ok=True)
+            with open(p, "w", encoding="utf-8", newline="") as f:
+                f.write(text)
+        if os.path.isfile(db):
+            src, dst = sqlite3.connect("file:%s?mode=ro" % db.replace("\\", "/"), uri=True), \
+                sqlite3.connect(os.path.join(stage, "telemetry.db"))
+            src.backup(dst)
+            src.close()
+            dst.close()
+        handoff = os.path.join(ws, ".orchestrator", "tmp", "handoff")
+        if os.path.isdir(handoff):
+            shutil.copytree(handoff, os.path.join(stage, "handoff"))
+        for top in LAYER:
+            p = os.path.join(ws, top)
+            dst = os.path.join(stage, "migrated-layer", top)
+            if os.path.isfile(p):
+                os.makedirs(os.path.dirname(dst), exist_ok=True)
+                shutil.copy2(p, dst)
+            elif os.path.isdir(p):
+                shutil.copytree(p, dst, ignore=shutil.ignore_patterns("telemetry.db*"))
+        for p in must:  # the check, on what was written
+            if p.strip() not in read(os.path.join(stage, "rules.md")):
+                raise RuntimeError("a project paragraph is missing from rules.md: " + p.strip()[:80])
+        with open(os.path.join(stage, "migrated.json"), "w", encoding="utf-8") as f:
+            json.dump({"from": ws, "template_version": version, "overrides": sorted(overrides),
+                       "project_paragraphs": len(must),
+                       "at": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}, f, indent=2)
+        for name in os.listdir(stage):  # into the (new, empty) state folder
+            os.replace(os.path.join(stage, name), os.path.join(st, name))
+        os.rmdir(stage)
+    except Exception as err:
+        shutil.rmtree(stage, ignore_errors=True)
+        return fail("stopped, nothing moved into %s: %s" % (st, err))
+    note = hat.record("%s: migrated from %s (template v%s)" % (pid, ws, version), "projects/" + pid)
+    print("verified: every project paragraph is in rules.md; state recorded in hat's home (%s)." % note)
+    print("Next: review %s/rules.md with the user. The workspace is unchanged and keeps its own layer until it is "
+          "cleaned up." % hat.norm(st))
+    return 0
+
+
+def main(args):
+    rest = [a for a in args if a != "--dry-run"]
+    if len(rest) != 1:
+        print(__doc__.strip(), file=sys.stderr)
+        return 2
+    return migrate(os.path.abspath(rest[0]), "--dry-run" in args)
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

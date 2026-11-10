@@ -5,6 +5,7 @@
   python3 scripts/hat.py project list                every project, with "missing" when its root is gone
   python3 scripts/hat.py project move <id> <root>    point a project at its new root
   python3 scripts/hat.py project remove <id>         unregister a project; its state stays in the home
+  python3 scripts/hat.py migrate <workspace> [--dry-run]  move a per-project workspace's state and rules into hat
   python3 scripts/hat.py status                      every project: its layer, resume point, active tasks, last session
   python3 scripts/hat.py doctor                      is hat installed and healthy on this machine (exit 1 if not)
   python3 scripts/hat.py context [<folder>]          the session-start header of the project, as hook JSON
@@ -95,7 +96,7 @@ def default_root(cwd):
 
 CLONE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 IGNORE_LINES = ("projects/*/telemetry.db*", "projects/*/handoff/", "projects/*/tmp/", "*.tmp",
-                "backup/", "install.json")  # backup/ may hold settings with tokens; install.json is this machine's
+                "backup/", "install.json", "projects/*/migrated-layer/")  # backup/ may hold settings with tokens; install.json is this machine's
 
 
 def state(pid):
@@ -271,6 +272,12 @@ def fail(msg):
     return 1
 
 
+def project_id(root):
+    """<folder name>-<6 hex of the path>: two folders with the same name are two projects."""
+    name = re.sub(r"[^A-Za-z0-9_-]+", "-", os.path.basename(root)).strip("-").lower() or "project"
+    return "%s-%s" % (name, hashlib.sha256(root.encode("utf-8")).hexdigest()[:6])
+
+
 def add(root):
     root = norm(root)
     if not os.path.isdir(root):
@@ -283,8 +290,7 @@ def add(root):
             return fail("%s is inside %s, registered as %s: one root per project" % (root, p["root"], pid))
         if inside(p["root"], root):
             return fail("%s contains %s, registered as %s: one root per project" % (root, p["root"], pid))
-    name = re.sub(r"[^A-Za-z0-9_-]+", "-", os.path.basename(root)).strip("-").lower() or "project"
-    pid = "%s-%s" % (name, hashlib.sha256(root.encode("utf-8")).hexdigest()[:6])
+    pid = project_id(root)
     projects[pid] = {"root": root}
     save(projects)
     os.makedirs(state(pid), exist_ok=True)
@@ -342,6 +348,10 @@ def main(argv):
         if hit:
             print("%s\t%s\t%s" % (hit[0], hit[1], norm(state(hit[0]))))
         return 0 if hit else 1
+    if args[:1] == ["migrate"]:
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import hat_migrate
+        return hat_migrate.main(args[1:])
     if args == ["status"]:
         return status()
     if args == ["doctor"]:
