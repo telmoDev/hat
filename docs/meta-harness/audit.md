@@ -15,7 +15,7 @@ called, no code was changed.
 | Open PRs on `telmoDev/hat` | none; #9–#21 (all of F1) merged |
 | Local branches | 21 (incl. `main`), all merged into `main` (`git branch --no-merged main` is empty): safe to prune when the user wants |
 | Local changes | none (clean tree) |
-| Workspaces on this machine with the layer | `gfu-sis`, `kaizen`: both `TEMPLATE_VERSION="0.7.0"`, **no telemetry store** (telemetry is unreleased) |
+| Workspaces on this machine with the layer | two real workspaces, both `TEMPLATE_VERSION="0.7.0"`, **no telemetry store** (telemetry is unreleased) |
 | Runtimes on this machine | Claude Code 2.1.311; **Codex not installed** |
 | Spec of the five phases | **not in the repo.** Tests cite criteria F1-01…F1-14 (F1-06, 07, 11, 12 cited by none); F2–F5 have no design document |
 
@@ -68,7 +68,7 @@ not needed (with reason).
 | F1 | Codex adapter | — (blocked) | Install Codex, capture real payloads, then adapter | Codex installed |
 | F1 | ODD criteria sync | V | — | — |
 | F1 | Reports, metrics skill, API-equivalent cost | V | Rates are the user's | — |
-| F1 | Workspace updater | V (tests) | First real run (kaizen or gfu-sis) | v0.8.0 |
+| F1 | Workspace updater | V (tests) | First run on a real workspace | v0.8.0 |
 | F1 | Benchmark harness | V | Valid sample: ≥ 3 runs a side, B2–B5 never run | User's go (spends quota) |
 | F1 | Global vs project metrics | — | Decide scope; read-only aggregation | Project registry (X1) |
 | F1 | Field data | — | Release v0.8.0, update one workspace, collect 1–2 weeks | v0.8.0 |

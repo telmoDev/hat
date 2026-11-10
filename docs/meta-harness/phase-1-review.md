@@ -13,7 +13,7 @@ update path from v0.7.0. Every figure below comes from a command that ran; the s
   figures only. Then 8 `SubagentStop` hooks of one session at once. Rerun with `scripts/measure_hooks.py`.
 - **Privacy**: a brief with a body after its header, an invalid hook input, an event with an unknown payload key,
   an unreadable transcript path; then the store and `errors.log` were searched for any of it.
-- **Update path**: copies of the two real workspaces' orchestration layers (`kaizen`, `gfu-sis`, both v0.7.0,
+- **Update path**: copies of the two real workspaces' orchestration layers (A and B, both v0.7.0,
   heavily customized), committed, then `scripts/update.sh --dev --dry-run` and `--dev`; then the hooks,
   `telemetry.py report`, `sync-criteria` and the workspace's own `memory-check.py` on the result. The real
   workspaces were only read.
@@ -30,9 +30,9 @@ update path from v0.7.0. Every figure below comes from a command that ran; the s
 | Transcript parser `claude-transcript/2` on current transcripts | reads 2.1.292, 2.1.308 and this session's 2.1.311 transcript (112 requests) |
 | Prompt body after the brief header stored | no |
 | Transcript paths stored in `events` | no (only in `claude_pending` until read) |
-| Update on `kaizen` copy | exit 0; user files (`AGENTS.md`, `CLAUDE.md`, `memory/`, `odd/`, checklist) unchanged; conf only gained keys; 8 hooks added; 5 scripts/skills the user changed kept, with `.new` copies |
-| Update on `gfu-sis` copy | exit 0; same; 6 `.new` copies |
-| After the update | hooks record runs; `sync-criteria` reads the real task files (kaizen 10 tasks, 16 criteria; gfu-sis 31 tasks, 43 criteria); the workspace's own `memory-check.py`: 0 errors |
+| Update on workspace A's copy | exit 0; user files (`AGENTS.md`, `CLAUDE.md`, `memory/`, `odd/`, checklist) unchanged; conf only gained keys; 8 hooks added; 5 scripts/skills the user changed kept, with `.new` copies |
+| Update on workspace B's copy | exit 0; same; 6 `.new` copies |
+| After the update | hooks record runs; `sync-criteria` reads the real task files (A: 10 tasks, 16 criteria; B: 31 tasks, 43 criteria); the workspace's own `memory-check.py`: 0 errors |
 
 All within target (hook p95 < 100 ms). Nothing blocked a session; nothing printed.
 
@@ -41,7 +41,7 @@ All within target (hook p95 < 100 ms). Nothing blocked a session; nothing printe
 | # | Finding | Severity | Decision |
 |---|---|---|---|
 | F1 | `errors.log` quotes an unknown payload key verbatim. Through the hooks keys are ours, but `telemetry.py ingest` takes external input, and a key can carry text (seen: `payload key 'prompt text here: hunter2' …`). | low (local file, `ingest` only) | **fixed** here: a key is named only when it looks like an identifier (`test_an_unknown_key_that_is_not_an_identifier_is_not_logged`) |
-| F2 | The session handoff lists every active task file, not the ones the session worked on. On the `gfu-sis` copy, 10 lines of features other sessions own, which `memory/` already tracks. | medium (noise in context) | **fixed** here: only task files the session changed, the others counted in one line (`test_only_the_task_files_this_session_changed`); on the `gfu-sis` copy, 10 lines → 2 |
+| F2 | The session handoff lists every active task file, not the ones the session worked on. On workspace B's copy, 10 lines of features other sessions own, which `memory/` already tracks. | medium (noise in context) | **fixed** here: only task files the session changed, the others counted in one line (`test_only_the_task_files_this_session_changed`); on workspace B's copy, 10 lines → 2 |
 | F3 | `update.py` doesn't touch `.codex/hooks.json`: Codex workspaces add the handoff hook by hand (CHANGELOG *Workspaces*). | low | accepted for v0.8.0; revisit with the Codex adapter (A2) |
 | F4 | Customized workspaces get several `.new` copies to merge by hand (5 and 6 on the real ones). | expected | accepted: R4 merges them with the user, workspace by workspace |
 | F5 | A main transcript unreadable at its session end stays queued until the next session starts (by design: the last attempt). | none | accepted |
