@@ -27,6 +27,14 @@ def snapshot(*roots):
     return out
 
 
+def block(out, pid):
+    """The lines of one project in `hat status`: from its id to the next project's."""
+    lines = out.splitlines()
+    start = next(i for i, l in enumerate(lines) if l.startswith(pid + " "))
+    end = next((i for i in range(start + 1, len(lines)) if not lines[i].startswith(" ")), len(lines))
+    return "\n".join(lines[start:end])
+
+
 class Views(unittest.TestCase):
     def setUp(self):
         self.tmp = os.path.realpath(tempfile.mkdtemp())
@@ -70,13 +78,12 @@ class Views(unittest.TestCase):
         con.close()
         code, out = self.hat("status")
         self.assertEqual(code, 0, out)
-        shop, blog = out.split(b)[0], out.split(b)[1]
-        self.assertIn(a, shop)
+        shop, blog = block(out, a), block(out, b)
         self.assertIn("finish the cart", shop)
-        self.assertIn("cart: T2 the totals", shop)
-        self.assertNotIn("old", shop.split("tasks")[1] if "tasks" in shop else "")
+        self.assertIn("1 active · cart: T2 the totals", shop)
         self.assertIn("2026-11-10T10:30:00Z", shop)
         self.assertNotIn("finish the cart", blog)
+        self.assertIn("none active", blog)
 
     def test_status_flags_an_own_layer_and_a_missing_root(self):
         a, ra, _ = self.project("legacy")
@@ -84,8 +91,8 @@ class Views(unittest.TestCase):
         b, rb, _ = self.project("gone")
         shutil.rmtree(rb)
         code, out = self.hat("status")
-        self.assertIn("own layer", out.split(a)[1].split(b)[0] if out.index(a) < out.index(b) else out.split(a)[1])
-        self.assertIn("root missing", out)
+        self.assertIn("own layer", block(out, a))
+        self.assertIn("root missing", block(out, b))
 
     def test_status_reads_only(self):
         a, ra, sa = self.project("shop")

@@ -249,23 +249,26 @@ def uninstall():
     return 0
 
 
-def check():
-    m, missing = manifest(), []
-    cmds = set()
+def missing():
+    """What the global install lacks on this machine (empty when it is complete)."""
+    out, cmds = [], set()
     text = read(home(".claude", "settings.json"))
     if text:
         cmds = {h.get("command") for gs in json.loads(text).get("hooks", {}).values() for g in gs
                 for h in g.get("hooks", [])}
-    missing += ["hook %s %s" % (e, command(h, a)) for e, _, h, a, _ in HOOKS if command(h, a) not in cmds]
+    out += ["hook %s %s" % (e, command(h, a)) for e, _, h, a, _ in HOOKS if command(h, a) not in cmds]
     if BEGIN not in (read(home(".claude", "CLAUDE.md")) or ""):
-        missing.append("pointer in ~/.claude/CLAUDE.md")
-    for kind, path, src in targets():
-        if not os.path.exists(path):
-            missing.append(path)
-    for line in missing:
+        out.append("pointer in ~/.claude/CLAUDE.md")
+    out += [path for _, path, _ in targets() if not os.path.exists(path)]
+    return out
+
+
+def check():
+    missing_ = missing()
+    for line in missing_:
         print("missing " + line)
-    print("hat global install: " + ("ok" if not missing else "incomplete (bash install.sh --global)"))
-    return 1 if missing else 0
+    print("hat global install: " + ("ok" if not missing_ else "incomplete (bash install.sh --global)"))
+    return 1 if missing_ else 0
 
 
 def main(argv):
