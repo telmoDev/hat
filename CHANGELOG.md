@@ -11,6 +11,12 @@ into the new version's section.
 
 ## Unreleased
 
+- **Known limits of this release.** Live on a real workspace: the update kept every user file, telemetry recorded
+  main-session and agent usage with full coverage (hooks p95 33 ms, no errors), and a synced session left no
+  handoff draft. Not yet seen live: the draft after a session that ends *without* `sync-memory` (covered by
+  `tests/test_session_handoff.py`), and a `PostToolUseFailure` payload (no tool failed). Codex records nothing yet
+  (F1-11 partial): its adapter waits for verified payloads.
+
 - `update.sh --keep-mine`: a file the user changed is kept as it is, without a `.new`, and its declined template
   recorded in `.orchestrator/update-keep`; the next updates offer it again only when its template changes.
   Before, every update wrote the same `.new` next to each file the user had chosen to keep.

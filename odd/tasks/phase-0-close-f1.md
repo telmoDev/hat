@@ -1,7 +1,7 @@
 # phase-0-close-f1
 
-Status: active · Next: T5: one session on the real workspace ended without `sync-memory` (handoff draft), then release v0.8.0
-Ticket: — · Repos: hat · PRs: hat #22 #23 #24 #25 #26 merged · phase-1 review open
+Status: done · Next: — (v0.8.0 is released right after this file's PR merges)
+Ticket: — · Repos: hat · PRs: hat #22–#33 merged
 
 ## Request
 > tambien hay que implementar memoria entre sessions
@@ -31,10 +31,10 @@ Assumptions · risks · depends on: D1 and D9 before T5 (R4); the workspace for 
 | ID | Task | Serves | Depends on | Agent · tier | Status |
 |---|---|---|---|---|---|
 | T1 | R1 contract doc + F1 spec traceability | S1 · O1 O2 | — | orchestrator · normal | done |
-| T2 | S1 automatic session handoff | S2 · O3 | — | orchestrator · normal | in progress |
+| T2 | S1 automatic session handoff | S2 · O3 | — | orchestrator · normal | done |
 | T3 | R2 global vs project metrics decision | O1 | T1 | orchestrator · trivial | done |
 | T4 | R3 phase-1 review + X3 rename | O4 | T1 | orchestrator · normal | done |
-| T5 | R4 release v0.8.0, update one workspace | O5 | T2 T3 T4, D1 D9 | user + orchestrator | pending |
+| T5 | R4 release v0.8.0, update one workspace | O5 | T2 T3 T4, D1 D9 | user + orchestrator | done |
 
 ## Evidence
 - 2026-11-06 T1 · O1 · `python3 -m unittest tests.test_telemetry_doc` → passed: 6 tests OK (red before the doc; removing one key from the doc fails it)
@@ -49,8 +49,8 @@ Assumptions · risks · depends on: D1 and D9 before T5 (R4); the workspace for 
 - 2026-11-10 T5 · O5 · `telemetry.py report` on a live session of that workspace → passed: main 2,774,625 tokens (opus) and 3 agent runs 1,134,898 (sonnet, haiku ×2), coverage 3/3, no `errors.log` (every SubagentStart key in the contract)
 - 2026-11-10 T4 · O4 · `ingest_log` on that workspace → passed: 17 hook calls, mean 22 ms, p95 33 ms, max 50 ms (target < 100 ms)
 - 2026-11-10 T2 · O3 · live session that ran `sync-memory` → passed: no draft written or shown at the next start
-- 2026-11-10 T5 · O5 · `PostToolUseFailure` live payload → pending: no tool failure happened in the session
-- 2026-11-10 T2 · O3 · live session ended without `sync-memory` leaves a draft shown at the next start → pending
+- 2026-11-10 T2 · O3 · live session ended without `sync-memory` leaves a draft shown at the next start → accepted untested live: two live sessions synced on their own (the flow syncs before a break); the end and start hooks ran live with the right session id; the unsynced path is covered by `tests.test_session_handoff`
+- 2026-11-10 T5 · O5 · `PostToolUseFailure` live payload → accepted untested live: listed in the release's known limits
 
 ## Run log
 - 2026-11-06 T1 · orchestrator · normal · attempt 1 · PR #23 merged · — · —
@@ -68,3 +68,4 @@ Assumptions · risks · depends on: D1 and D9 before T5 (R4); the workspace for 
 - 2026-11-06 D9 decided by the user: docs in English ("idioma ingles").
 - 2026-11-06 The user postponed T5's real-workspace test ("aun no probemos"); T2's real-session check waits with it.
 - 2026-11-10 The user resumed T5 on a real workspace of theirs, updated with `--dev` before the release (TEMPLATE_VERSION stays 0.7.0 until v0.8.0). PRs #28 (K1) and #29 (X2) go into v0.8.0. Codex's half of F1-11 stays partial (Codex blocked).
+- 2026-11-10 The user accepted the phase 0 gate with two checks untested live (the unsynced-session draft, a `PostToolUseFailure` payload) as known limits in the CHANGELOG, and asked for the release.
