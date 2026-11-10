@@ -11,6 +11,10 @@ into the new version's section.
 
 ## Unreleased
 
+- `AGENTS.md` › *Orchestrator role*: **Answers to the user**: lead with the result or the decision needed, don't
+  repeat what the user knows, recommend one option instead of listing those not pursued, ask only what changes
+  the outcome, all at once. Agents' reports were already capped; the orchestrator's own answers weren't.
+
 - `scripts/update.py` no longer recreates a root skill the workspace had and removed (a standard it keeps in a
   repo's own copy, or dropped); skills new since the workspace's version are still created. `sync-skills.sh`
   leaves the update's `.new` copies out of `.claude/skills/`.
@@ -212,7 +216,8 @@ into the new version's section.
   row on run-log figures with the template's; in `odd/README.md`, the "Figures are…" rule and the *Run log* line;
   in `memory/PROGRESS.md`, the `Cost:` line with `Attempts:`; in *Orchestrator role*, the paragraph that opens
   the flow ("The flow is **Organic Driven Development (ODD)**…") with the template's; in *Session memory*, the
-  sentence on the session handoff after "…and it stays short.", and the *Tool mapping* row "Session handoff".
+  sentence on the session handoff after "…and it stays short.", and the *Tool mapping* row "Session handoff";
+  in *Orchestrator role*, add the template's **Answers to the user** paragraph after the first one.
   With Codex, add the template's `session-handoff.sh start` entry to `.codex/hooks.json` › SessionStart.
   Restart the sessions so the hooks load.
 
