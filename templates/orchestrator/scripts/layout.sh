@@ -4,6 +4,15 @@
 # project's config, memory, task files and stamps live in HAT_STATE: nothing is written inside the project.
 # Sets: root conf mem tasks tmp here (here = the folder holding scripts/ and hooks/).
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# Run by hand from the clone (no hook set HAT_STATE): find the project from the folder it runs in.
+if [ -z "${HAT_STATE:-}" ] && [ "$(basename "$(dirname "$here")")" = templates ] && [ -f "$here/../../scripts/hat.py" ]; then
+  _py=""; for _c in python3 python; do command -v "$_c" >/dev/null 2>&1 && { _py=$_c; break; }; done
+  if [ -n "$_py" ] && _hit=$($_py "$here/../../scripts/hat.py" resolve-payload <<< '{}' 2>/dev/null); then
+    IFS=$'\t' read -r HAT_PROJECT HAT_ROOT HAT_STATE <<< "$_hit"
+    HAT_STATE=${HAT_STATE%$'\r'}
+    export HAT_PROJECT HAT_ROOT HAT_STATE
+  fi
+fi
 if [ -n "${HAT_STATE:-}" ]; then
   root="${HAT_ROOT:-$PWD}" conf="$HAT_STATE/config" mem="$HAT_STATE/memory" tasks="$HAT_STATE/tasks" tmp="$HAT_STATE/tmp"
 else

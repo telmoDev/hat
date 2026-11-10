@@ -57,7 +57,7 @@ Fix every failure and rerun until it passes. Don't commit around it.
 
 ## 4. Commit
 
-Skip this step when `.orchestrator/orchestrator.conf` has `ROOT_GIT="no"`: the memory is not versioned.
+Skip this step when `.orchestrator/orchestrator.conf` has `ROOT_GIT="no"`: the memory is not versioned. Under hat's global install (the session start says `hat project <id>`), the memory lives in hat's home, a local git repo: run `python3 <hat>/scripts/hat.py commit "sync after <task>"` from the project instead of the commands below.
 
 ```bash
 git add memory odd && git commit -m "<sync after <task>, in the root's commit convention>"

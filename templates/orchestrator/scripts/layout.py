@@ -10,8 +10,27 @@ import os
 Layout = collections.namedtuple("Layout", "root conf memory tasks telemetry handoff tmp project task_prefix")
 
 
+def _from_clone():
+    """Under the global install a script the orchestrator runs by hand (no hook set HAT_STATE) runs from the clone:
+    it finds its project from the folder it runs in, through hat's registry. A workspace's copy never does."""
+    if os.environ.get("HAT_STATE"):
+        return
+    here = os.path.dirname(os.path.abspath(__file__))
+    hat_py = os.path.join(here, "..", "..", "..", "scripts", "hat.py")
+    if os.path.basename(os.path.dirname(os.path.dirname(here))) != "templates" or not os.path.isfile(hat_py):
+        return
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("hat", hat_py)
+    hat = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(hat)
+    hit = hat.resolve(os.getcwd())
+    if hit:
+        os.environ.update(HAT_PROJECT=hit[0], HAT_ROOT=hit[1], HAT_STATE=hat.state(hit[0]))
+
+
 def root(script):
     """The project root: HAT_ROOT under the global install, else the workspace this script was copied into."""
+    _from_clone()
     if os.environ.get("HAT_STATE"):
         return os.path.abspath(os.environ.get("HAT_ROOT") or os.getcwd())
     return os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(script))))
@@ -19,6 +38,7 @@ def root(script):
 
 def of(root):
     """The paths of the project at root. task_prefix is how the memory links a task file."""
+    _from_clone()
     state = os.environ.get("HAT_STATE")
     if state:
         return Layout(root, os.path.join(state, "config"), os.path.join(state, "memory"),
