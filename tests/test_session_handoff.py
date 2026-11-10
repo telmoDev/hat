@@ -256,7 +256,7 @@ class Hook(Workspace):
         os.makedirs(self.path(".orchestrator/scripts"), exist_ok=True)
         shutil.copy(os.path.join(REPO, "templates", "orchestrator", "hooks", "session-handoff.sh"),
                     self.path(".orchestrator/hooks"))
-        for name in ("session_handoff.py", "odd_tasks.py"):
+        for name in ("session_handoff.py", "odd_tasks.py", "layout.py", "layout.sh"):
             shutil.copy(os.path.join(SCRIPTS, name), self.path(".orchestrator/scripts"))
         t0 = time.perf_counter()
         p = subprocess.run([BASH, self.path(".orchestrator/hooks/session-handoff.sh"), verb],

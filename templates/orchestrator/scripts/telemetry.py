@@ -26,6 +26,8 @@ import re  # noqa: E402
 import sqlite3  # noqa: E402
 import sys  # noqa: E402
 
+import layout  # noqa: E402  next to this file: where the project's files are
+
 SCHEMA_VERSION = 1
 SOURCES = ("runtime_reported", "calculated", "estimated", "unavailable")
 TOKENS = ("input_tokens", "output_tokens", "cache_read_tokens", "cache_write_tokens")
@@ -465,7 +467,7 @@ def sync_criteria(store, root, run=None, now=None):
     import odd_tasks  # next to this file
     now, x, seen, recorded = utc(now), store.db.execute, 0, 0
     observer = run or "local:sync-criteria"
-    folder = os.path.join(root, "odd", "tasks")
+    folder = layout.of(root).tasks
     names = sorted(n for n in os.listdir(folder) if n.endswith(".md")) if os.path.isdir(folder) else []
     for name in names:
         feature = name[:-3]
@@ -512,7 +514,11 @@ def _usage_events(run, inv, models, reason, version, now):
 
 def db_path():
     here = os.path.dirname(os.path.abspath(__file__))
-    return os.environ.get("ORCH_TELEMETRY_DB") or os.path.join(os.path.dirname(here), "telemetry", "telemetry.db")
+    if os.environ.get("ORCH_TELEMETRY_DB"):
+        return os.environ["ORCH_TELEMETRY_DB"]
+    if os.environ.get("HAT_STATE"):  # the global install: the project's state folder
+        return layout.of(layout.root(__file__)).telemetry
+    return os.path.join(os.path.dirname(here), "telemetry", "telemetry.db")
 
 
 def _note_error(path, command, err):
@@ -621,7 +627,7 @@ def main(argv):
             os.makedirs(os.path.dirname(path))
         except OSError:
             return 0
-    root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    root = layout.root(__file__)
     if argv[1] == "sync-criteria":
         ingest("sync-criteria", lambda store: sync_criteria(store, root), path)
         return 0
@@ -629,7 +635,7 @@ def main(argv):
     if argv[1] == "ingest":
         ingest("ingest", lambda store: _record_all(store, _read_events(text)), path)
     else:
-        ingest("hook claude", lambda store: claude_hook(store, json.loads(text), os.environ, os.path.basename(root),
+        ingest("hook claude", lambda store: claude_hook(store, json.loads(text), os.environ, layout.of(root).project,
                                                         root=root), path)
     return 0
 

@@ -3,9 +3,9 @@
 # without loading the docs. Paths come from ADR_DIR and DECISION_LOG in .orchestrator/orchestrator.conf; with
 # neither set it prints nothing. Superseded, rejected and deprecated entries are left out; partly
 # superseded ones are marked.
-root="$(cd "$(dirname "$0")/../.." && pwd)"  # the workspace root, whichever tool runs this
-[ -f "$root/.orchestrator/orchestrator.conf" ] || exit 0
-. "$root/.orchestrator/orchestrator.conf"
+. "$(dirname "$0")/../scripts/layout.sh"  # root, conf, mem, tasks, tmp, here: the workspace or hat's state
+[ -f "$conf" ] || exit 0
+. "$conf"
 adr="${ADR_DIR:+$root/$ADR_DIR}"; dl="${DECISION_LOG:+$root/$DECISION_LOG}"
 { [ -n "$adr" ] && [ -d "$adr" ]; } || { [ -n "$dl" ] && [ -f "$dl" ]; } || exit 0
 skip='^(Superseded|Rejected|Deprecated)'

@@ -140,8 +140,10 @@ class HookEntry(unittest.TestCase):
         o = os.path.join(self.root, ".orchestrator")
         for sub in ("scripts", "hooks"):
             os.makedirs(os.path.join(o, sub))
-        shutil.copy(os.path.join(TPL, "scripts", "telemetry.py"), os.path.join(o, "scripts"))
+        for name in ("telemetry.py", "layout.py"):
+            shutil.copy(os.path.join(TPL, "scripts", name), os.path.join(o, "scripts"))
         shutil.copy(os.path.join(TPL, "hooks", "telemetry.sh"), os.path.join(o, "hooks"))
+        shutil.copy(os.path.join(TPL, "scripts", "layout.sh"), os.path.join(o, "scripts"))
         self.conf = os.path.join(o, "orchestrator.conf")
         with open(self.conf, "w") as f:
             f.write('REPOS="."\n')
@@ -210,7 +212,7 @@ class NoModelOrNetwork(unittest.TestCase):  # F1-13
     def test_imports_only_local_modules(self):
         allowed = {"datetime", "hashlib", "json", "os", "re", "sqlite3", "sys", "time", "claude_transcript", "odd_tasks",
                    "api_cost", "decimal", "reports", "argparse",
-                   "benchmark_report"}
+                   "benchmark_report", "layout"}
         for script in ("telemetry.py", "claude_transcript.py", "api_cost.py"):
             with open(os.path.join(TPL, "scripts", script)) as f:
                 tree = ast.parse(f.read())

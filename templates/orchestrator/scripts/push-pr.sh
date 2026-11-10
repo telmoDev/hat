@@ -8,8 +8,8 @@
 # Git runs through GIT_WRAPPER when orchestrator.conf sets one. If the branch already has an open PR, it only
 # pushes and prints that PR's URL. It never merges and never force-pushes.
 set -euo pipefail
-root="$(cd "$(dirname "$0")/../.." && pwd)"  # the workspace root, whichever tool runs this
-. "$root/.orchestrator/orchestrator.conf"
+. "$(dirname "$0")/layout.sh"  # root, conf, mem, tasks, tmp, here: the workspace or hat's state
+. "$conf"
 usage="usage: push-pr.sh <repo> <branch> <base> <title> <body-file> [--draft] [--reviewer <login>]"
 [ $# -ge 5 ] || { echo "$usage" >&2; exit 2; }
 repo=$1 branch=$2 base=$3 title=$4 body=$5; shift 5
@@ -43,7 +43,7 @@ rgit fetch -q origin "$base"
   && fail "a commit on $branch carries AI attribution"
 git -C "$root/$repo" merge-base --is-ancestor "origin/$base" "$branch" \
   || fail "$branch does not contain origin/$base: bring the base in and re-run the gate"
-stamp="$root/.orchestrator/tmp/pre-pr/${repo//\//_}--${branch//\//_}"
+stamp="$tmp/pre-pr/${repo//\//_}--${branch//\//_}"
 head=$(git -C "$root/$repo" rev-parse "refs/heads/$branch")
 [ -f "$stamp" ] && [ "$(cat "$stamp")" = "$head" ] \
   || fail "the pre-PR gate has not passed on $branch at ${head:0:7} (.orchestrator/pre-pr-checklist.md, then pre-pr-pass.sh)"
