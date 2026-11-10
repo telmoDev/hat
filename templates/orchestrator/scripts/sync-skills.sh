@@ -15,8 +15,9 @@ status=0
 for d in "$src"/*/; do
   name=$(basename "$d")
   case " ${CODEX_ONLY_SKILLS:-} " in *" $name "*) continue ;; esac
-  if diff -rq "$d" "$dst/$name" >/dev/null 2>&1; then continue; fi
+  if diff -rq -x '*.new' "$d" "$dst/$name" >/dev/null 2>&1; then continue; fi  # a .new is the update's, to merge
   if [ $check = yes ]; then echo "sync-skills: .claude/skills/$name differs from .agents/skills/$name"; status=1; continue; fi
-  rm -rf "$dst/$name"; mkdir -p "$dst"; cp -R "$d" "$dst/$name"; echo "sync-skills: copied $name"
+  rm -rf "$dst/$name"; mkdir -p "$dst"; cp -R "$d" "$dst/$name"; find "$dst/$name" -name '*.new' -delete
+  echo "sync-skills: copied $name"
 done
 exit $status
