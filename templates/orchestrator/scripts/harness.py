@@ -114,6 +114,8 @@ def main(argv):
     if len(argv) < 2 or argv[1] != "doctor":
         print(__doc__.strip())
         return 2
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")  # the report uses "·"; Windows pipes default to cp1252
     root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     report = doctor(root)
     print(json.dumps(report, indent=2) if "--json" in argv else _markdown(report))

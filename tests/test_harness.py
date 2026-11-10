@@ -21,12 +21,17 @@ DOC = os.path.join(REPO, "docs", "harnesses.md")
 
 
 def stub_bin(folder, name, version, log):
-    """A fake CLI that records its arguments and answers --version only."""
-    path = os.path.join(folder, name)
-    with open(path, "w", newline="\n") as f:
-        f.write('#!/usr/bin/env bash\necho "$@" >> "%s"\n[ "$1" = --version ] && echo "%s" && exit 0\nexit 9\n'
-                % (log.replace("\\", "/"), version))
-    os.chmod(path, 0o755)
+    """A fake CLI that records its arguments and answers --version only. Python, so it runs on Windows too,
+    where shutil.which finds only PATHEXT files: there a .cmd wrapper calls it."""
+    script = os.path.join(folder, name + ".py" if os.name == "nt" else name)
+    with open(script, "w", encoding="utf-8", newline="\n") as f:
+        f.write("#!%s\nimport sys\nwith open(%r, \"a\") as f:\n    f.write(\" \".join(sys.argv[1:]) + \"\\n\")\n"
+                "if sys.argv[1:] == [\"--version\"]:\n    print(%r)\n    sys.exit(0)\nsys.exit(9)\n"
+                % (sys.executable, log, version))
+    os.chmod(script, 0o755)
+    if os.name == "nt":
+        with open(os.path.join(folder, name + ".cmd"), "w") as f:
+            f.write('@"%s" "%s" %%*\n' % (sys.executable, script))
 
 
 class Contract(unittest.TestCase):
