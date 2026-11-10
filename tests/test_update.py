@@ -121,6 +121,20 @@ class Workspace(unittest.TestCase):
                            timeout=120)
         return p.returncode, p.stdout.decode() + p.stderr.decode()
 
+    def dev_skill(self):
+        skill = os.path.join(tempfile.mkdtemp(dir=self.tmp), "skill")
+        git("clone", "-q", self.skill, skill, env=self.env)
+        git("tag", "-d", "v0.8.0", cwd=skill, env=self.env)  # the same tree, before its release
+        return skill
+
+    def release(self, skill, *changes):
+        for change in changes:
+            with open(os.path.join(skill, "templates", "orchestrator", "scripts", change), "a") as f:
+                f.write("# changed after the --dev snapshot\n")
+        if changes:
+            git("commit", "-qam", "a later change", cwd=skill, env=self.env)
+        git("tag", "v0.8.0", cwd=skill, env=self.env)
+
     def commit(self):
         git("add", "-A", cwd=self.ws, env=self.env)
         git("commit", "-qm", "update", "--allow-empty", cwd=self.ws, env=self.env)
@@ -316,20 +330,6 @@ class Partial(Workspace):
 class DevToRelease(Workspace):
     """A workspace updated with --dev from an unreleased skill, then updated without it once the release is out."""
 
-    def dev_skill(self):
-        skill = os.path.join(tempfile.mkdtemp(dir=self.tmp), "skill")
-        git("clone", "-q", self.skill, skill, env=self.env)
-        git("tag", "-d", "v0.8.0", cwd=skill, env=self.env)  # the same tree, before its release
-        return skill
-
-    def release(self, skill, *changes):
-        for change in changes:
-            with open(os.path.join(skill, "templates", "orchestrator", "scripts", change), "a") as f:
-                f.write("# changed after the --dev snapshot\n")
-        if changes:
-            git("commit", "-qam", "a later change", cwd=skill, env=self.env)
-        git("tag", "v0.8.0", cwd=skill, env=self.env)
-
     def test_a_release_equal_to_the_snapshot_needs_no_new_copies(self):
         skill = self.dev_skill()
         code, out = self.update("--dev", skill=skill)
@@ -361,6 +361,39 @@ class DevToRelease(Workspace):
         self.assertTrue(self.read(".orchestrator/scripts/memory-state.sh").endswith(
             "# changed after the --dev snapshot\n"))
         self.assertIn('TEMPLATE_VERSION="0.8.0"', self.read(".orchestrator/orchestrator.conf"))
+
+
+class KeepMine(Workspace):
+    """--keep-mine: a file the user changed is kept without a .new, and offered again only when its template
+    changes."""
+
+    def test_kept_without_a_new_copy_and_remembered(self):
+        code, out = self.update("--keep-mine")
+        self.assertEqual(code, 0, out)
+        self.assertTrue(self.read(".orchestrator/scripts/push-pr.sh").endswith("# my local tweak\n"))
+        self.assertFalse(os.path.exists(self.path(".orchestrator/scripts/push-pr.sh.new")))
+        self.assertIn("keep   .orchestrator/scripts/push-pr.sh", out)
+        self.assertNotIn("Needs your attention:\n  - .orchestrator", out)
+        self.assertIn(" .orchestrator/scripts/push-pr.sh", self.read(".orchestrator/update-keep"))
+        self.assertTrue(os.path.isfile(self.path(".orchestrator/scripts/session_handoff.py")))  # the rest applies
+        self.commit()
+        before = self.snapshot()
+        code, out = self.update()  # without the flag: the choice is remembered
+        self.assertEqual(code, 0, out)
+        self.assertIn("No changes", out)
+        self.assertEqual(self.snapshot(), before)
+
+    def test_offered_again_when_the_template_changes(self):
+        skill = self.dev_skill()
+        code, out = self.update("--dev", "--keep-mine", skill=skill)
+        self.assertEqual(code, 0, out)
+        self.commit()
+        self.release(skill, "push-pr.sh")
+        code, out = self.update(skill=skill)
+        self.assertEqual(code, 0, out)
+        self.assertTrue(self.read(".orchestrator/scripts/push-pr.sh").endswith("# my local tweak\n"))
+        self.assertTrue(self.read(".orchestrator/scripts/push-pr.sh.new").endswith(
+            "# changed after the --dev snapshot\n"))
 
 
 class Changelog(unittest.TestCase):
