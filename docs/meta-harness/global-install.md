@@ -149,6 +149,7 @@ verified: the pointer goes into `~/.codex/AGENTS.md`, project state is read by t
 | G5 | Config instead of forks (X4): `TICKETS`, checklist items by title, the keys of §5 | M | G4 |
 | G6 | `hat migrate`: detection, verbatim copy of the project's own guidelines, full layer copy, review with the user, verification, cleanup on yes; coexistence with per-project layers | M | G2 G3 G4 |
 | G7 | `hat doctor` and `hat status` across registered projects (read-only) | S | G1 |
+| G8 | Compaction that loses nothing: a `PreCompact` hook writes the handoff draft into `<state>` before the context is summarized; `SessionStart` with source `compact` adds the header, the memory and that draft back; telemetry records each compaction with the tokens before and after, so its saving is measured. Keep compaction on (the user, 2026-11-10: improve it, don't remove it); payloads checked live before relying on them | S | G2 G3 |
 
 Exit gate for v0.9.0: one machine with the global install and no per-project layer; two projects registered, each
 with its own memory, tasks and telemetry, shown apart by `hat status`; a session outside any project gets no hat
