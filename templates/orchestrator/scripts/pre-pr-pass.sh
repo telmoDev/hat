@@ -30,7 +30,7 @@ elif [ "${TDD:-off}" = strict ] && { [ -z "${TDD_REPOS:-}" ] || case " $TDD_REPO
     if printf '%s\n' "$subject" | grep -Eq "$TDD_TEST_COMMIT"; then
       tested=yes
     elif printf '%s\n' "$subject" | grep -Eq "$TDD_CODE_COMMIT"; then
-      [ $tested = yes ] || { echo "pre-pr-pass: ${c:0:7} '$subject' has no test commit before it (TDD); see .orchestrator/pre-pr-checklist.md item 9 (if it came from the base, fetch origin and re-run)" >&2; exit 1; }
+      [ $tested = yes ] || { echo "pre-pr-pass: ${c:0:7} '$subject' has no test commit before it (TDD); see the checklist's *Test first* item (if it came from the base, fetch origin and re-run)" >&2; exit 1; }
       tested=no
     fi
   done < <(git -C "$root/$repo" log --reverse --no-merges ${since[@]+"${since[@]}"} --format='%H %s' "$ref..$sha")

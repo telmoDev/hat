@@ -19,7 +19,7 @@ if (!repo || !branch) throw new Error('args needs repo and branch')
 
 const CONTEXT = `Workspace root: ${ROOT}. Repo: ${ROOT}/${repo}. Branch: ${branch}, base origin/${base}.${args.ticket ? ` Ticket: ${args.ticket}.` : ''}
 ${args.spec ? `Spec the diff implements: ${args.spec}.` : 'Find the spec and the decisions the diff cites (see the repo guide in AGENTS.md for where they live).'}
-${args.outcome ? `Outcome the diff must meet:\n${args.outcome}` : 'The outcome and its criteria are in the PR body draft or the brief; if none is given, report item 8 as failed.'}
+${args.outcome ? `Outcome the diff must meet:\n${args.outcome}` : 'The outcome and its criteria are in the PR body draft or the brief; if none is given, report the *Outcome met* checklist item as failed.'}
 The checklist is ${ROOT}/.orchestrator/pre-pr-checklist.md. Start from \`git -C ${ROOT}/${repo} diff --stat origin/${base}...${branch}\`, then open only the files that carry risk for your items.
 Read-only: never edit, commit, branch or push. Review as the human reviewer would: report only defects that break a checklist item, not style preferences.`
 

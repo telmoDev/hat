@@ -11,6 +11,16 @@ into the new version's section.
 
 ## Unreleased
 
+- Global install G5 (roadmap X4, configure instead of forking): no layer file cites a checklist item by number
+  any more (`pre-pr-pass.sh`, `pre-pr-review`): a project with its own checklist keeps the template's files. The
+  ticket system is configuration: `TICKETS` (e.g. `jira`, `github`) and `TICKET_PROJECT` in the config, and an
+  `AGENTS.md` › **Tickets** paragraph (search or create the task's ticket before briefing, its key in every brief
+  and PR body, moved along with its PR; through an MCP server or `gh`, from a trivial-tier agent); `sync-memory`
+  checks ticket keys against it. Without `TICKETS`, nothing changes.
+  **Workspaces:** run `bash <skill>/scripts/update.sh <workspace-root>` (it adds `TICKETS` and `TICKET_PROJECT` to
+  the conf). By hand, only if the workspace uses tickets: add the template's **Tickets** paragraph to `AGENTS.md`
+  before step 1 of the flow, set the two keys, and drop the ticket steps the workspace had written itself.
+
 - Global install G7: `hat status` shows every registered project apart: whether it runs on hat or still has its
   own layer (or its root is gone), its resume point, its active task files with their `Next:`, and its last
   session from its telemetry. `hat doctor` checks this machine: Python, `claude`, the global install (what is
