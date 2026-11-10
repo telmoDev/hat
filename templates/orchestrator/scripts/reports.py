@@ -24,6 +24,7 @@ Definitions (what each figure means and what it never stands for):
 - The API-equivalent cost is an estimate (api_cost.py), never what a subscription costs.
 """
 import datetime
+import json
 import statistics
 from decimal import Decimal
 
@@ -335,6 +336,16 @@ def report(db, run, rates_path):
     out += ["", "Coverage %d/%d (agent runs) · Main session tokens %s · agent runs tokens %s (reported usage only)" % (
         sum(r["covered"] for r in fin), len(fin), _n(sum(main_tok.values())) if main_tok else NA,
         _n(sum(tok.values())) if tok else NA)]
+    compactions = [json.loads(r[0]) for r in db.execute(
+        "SELECT payload_json FROM events WHERE run_id = ? AND event_type = 'session.compacted' ORDER BY timestamp", (run_id,))]
+    if compactions:
+        triggers = {}
+        for c in compactions:
+            triggers[c.get("trigger") or "unknown"] = triggers.get(c.get("trigger") or "unknown", 0) + 1
+        sizes = [_n(c["context_tokens"]) for c in compactions if isinstance(c.get("context_tokens"), int)]
+        out.append("Compactions %d (%s) · context before: %s" % (
+            len(compactions), ", ".join("%s %d" % kv for kv in sorted(triggers.items())),
+            (", ".join(sizes) + " tokens") if sizes else NA))
     rates, _, _ = api_cost.load_rates(rates_path)
     value, why = _cost(rows, rates)
     out += ["API-equivalent (estimated, combined cache-write rate): %s. Not what a subscription costs you." % (

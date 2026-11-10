@@ -11,6 +11,14 @@ into the new version's section.
 
 ## Unreleased
 
+- Compaction that loses nothing (global install G8; compaction stays on): a `PreCompact` hook saves where the
+  session is (dirty branches, every active task file with its `Next:`, unfinished agent runs) whether or not the
+  memory was synced, and the `SessionStart` that follows (`source: compact`, same session) shows it once, next to
+  the header and memory those hooks already reload. Telemetry records each compaction as `session.compacted`
+  with its trigger and the context size before it; `telemetry.py report` shows them per run. Payloads checked on a
+  live session first. Wired in the global install and in the per-project settings template.
+  **Workspaces:** `bash <skill>/scripts/update.sh <workspace-root>` adds the two `PreCompact` hooks.
+
 - Global install G6b: `hat migrate <workspace> --cleanup`, after a verified migration and only when the layer is
   unchanged since, removes hat's old layer in one commit at the workspace root (git can undo it): `AGENTS.md`,
   `CLAUDE.md`, `.orchestrator/`, `memory/`, `odd/`, hat's skills, agents and workflow, and hat's hooks inside

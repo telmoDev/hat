@@ -314,7 +314,7 @@ class NoModelOrNetwork(unittest.TestCase):
             tree = ast.parse(f.read())
         names = {a.name.split(".")[0] for n in ast.walk(tree) if isinstance(n, ast.Import) for a in n.names}
         names |= {n.module.split(".")[0] for n in ast.walk(tree) if isinstance(n, ast.ImportFrom) and n.module}
-        self.assertLessEqual(names, {"api_cost", "datetime", "decimal", "statistics"})
+        self.assertLessEqual(names, {"api_cost", "datetime", "decimal", "json", "statistics"})
 
 
 if __name__ == "__main__":

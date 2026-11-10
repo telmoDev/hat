@@ -46,6 +46,7 @@ EVENTS = {
     "usage.reported": (True, ("model",) + TOKENS + ("source", "parser_version", "requests", "reason")),
     "criterion.verified": (False, ("criterion_code", "status", "verification_method")),
     "execution.blocked": (False, ("reason",)),
+    "session.compacted": (False, ("trigger", "context_tokens", "source", "reason")),
 }
 STATUSES = {
     "run": ("running", "completed", "failed"),
@@ -351,6 +352,13 @@ def claude_events(p, env, project, now=None):
         return [make_event("run.completed", run, timestamp=now, payload=_clean({"status": "completed",
                                                                   "reason": _short(p.get("reason"))})),
                 make_event("agent.completed", run, timestamp=now, invocation_id=run + ":main", payload=main)]
+    if kind == "PreCompact":
+        import claude_transcript  # next to this file
+        size, why = claude_transcript.context_tokens(p.get("transcript_path"))
+        payload = {"trigger": _short(p.get("trigger")), "source": "runtime_reported" if size is not None else "unavailable"}
+        payload.update({"context_tokens": size} if size is not None else {"reason": why})
+        return [make_event("session.compacted", run, timestamp=now, payload=_clean(payload),
+                           key="compact:" + str(p.get("prompt_id") or utc(now)))]
     if kind in ("SubagentStart", "SubagentStop"):
         aid = agent_id(p.get("agent_id"))
         if not isinstance(aid, str) or not aid:

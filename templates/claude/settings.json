@@ -52,6 +52,24 @@
         ]
       }
     ],
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PROJECT_DIR:-$PWD}/.orchestrator/hooks/session-handoff.sh\" compact",
+            "timeout": 5,
+            "shell": "bash"
+          },
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PROJECT_DIR:-$PWD}/.orchestrator/hooks/telemetry.sh\" hook claude",
+            "timeout": 5,
+            "shell": "bash"
+          }
+        ]
+      }
+    ],
     "SubagentStart": [
       {
         "hooks": [
