@@ -1,6 +1,6 @@
 # phase-0-close-f1
 
-Status: active · Next: T5 waits: the user postponed the real-workspace test (2026-11-06)
+Status: active · Next: T5: one gfu-sis session ended without `sync-memory` (handoff draft), then release v0.8.0
 Ticket: — · Repos: hat · PRs: hat #22 #23 #24 #25 #26 merged · phase-1 review open
 
 ## Request
@@ -45,6 +45,12 @@ Assumptions · risks · depends on: D1 and D9 before T5 (R4); the workspace for 
 - 2026-11-06 T4 · O4 · `python3 scripts/measure_hooks.py` on a scaffolded workspace → passed: hook p95 34–67 ms, 41 MB transcript 147 ms, 8 parallel stops all recorded, nothing private stored
 - 2026-11-06 T4 · O4 · `bash scripts/update.sh --dev` on copies of kaizen and gfu-sis → passed: exit 0, user files unchanged, hooks record, memory-check 0 errors
 - 2026-11-06 T4 · O4 · `bash tests/smoke.sh` → passed: 39 checks, with the review's two fixes (tests first)
+- 2026-11-10 T5 · O5 · `update.sh --dev` on gfu-sis (the user's pick) → passed: exit 0; memory, task files and the user's 5 changed layer files unchanged (kept with `--keep-mine`); two update issues found and fixed (PR #30), `--keep-mine` added (PR #32)
+- 2026-11-10 T5 · O5 · `telemetry.py report` on a live gfu-sis session → passed: main 2,774,625 tokens (opus) and 3 agent runs 1,134,898 (sonnet, haiku ×2), coverage 3/3, no `errors.log` (every SubagentStart key in the contract)
+- 2026-11-10 T4 · O4 · `ingest_log` on gfu-sis → passed: 17 hook calls, mean 22 ms, p95 33 ms, max 50 ms (target < 100 ms)
+- 2026-11-10 T2 · O3 · live gfu-sis session that ran `sync-memory` → passed: no draft written or shown at the next start
+- 2026-11-10 T5 · O5 · `PostToolUseFailure` live payload → pending: no tool failure happened in the session
+- 2026-11-10 T2 · O3 · live session ended without `sync-memory` leaves a draft shown at the next start → pending
 
 ## Run log
 - 2026-11-06 T1 · orchestrator · normal · attempt 1 · PR #23 merged · — · —
@@ -61,3 +67,4 @@ Assumptions · risks · depends on: D1 and D9 before T5 (R4); the workspace for 
 - 2026-11-06 X3 (rename follow-through) done in PR #26 with D1 assumed as recommended: URLs and product name only.
 - 2026-11-06 D9 decided by the user: docs in English ("idioma ingles").
 - 2026-11-06 The user postponed T5's real-workspace test ("aun no probemos"); T2's real-session check waits with it.
+- 2026-11-10 The user resumed T5 on gfu-sis, updated with `--dev` before the release (TEMPLATE_VERSION stays 0.7.0 until v0.8.0). PRs #28 (K1) and #29 (X2) go into v0.8.0. Codex's half of F1-11 stays partial (Codex blocked).

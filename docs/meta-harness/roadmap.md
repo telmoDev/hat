@@ -158,6 +158,16 @@ once shipped.
   declaring only what is verified (SessionStart hooks, `usage: unavailable`).
 - Files: `templates/orchestrator/scripts/adapters/`, `telemetry.py`. Tokens: 0.
 
+**X4 · Projects configure, never fork** · S · deps: — (early start)
+- Found updating a real workspace (2026-11-10): it had to keep its own copy of three layer files because the
+  template hard-codes what differs per project: the checklist item `pre-pr-pass.sh` cites by number, and the
+  ticket system (Jira) in `sync-memory` and `pre-pr-review`. A forked file stops receiving updates
+  (`update.sh --keep-mine` only quiets it). `decision-index.sh` shows the fix: paths read from `orchestrator.conf`.
+- What differs per project becomes a conf key or is looked up by name (checklist items by title, `TICKETS=` for
+  the ticket system), so many projects share one template.
+- Criteria: a workspace with its own checklist numbering and a ticket system keeps every layer file identical to
+  the template; `.orchestrator/update-keep` stays empty. Tokens: 0.
+
 **M1 · Cross-project in-flight view and dependency check** · S · deps: X1
 - `hat status` adds task-file dependencies across projects: cycles, blocked tasks, stale *Resume* items.
 
