@@ -24,13 +24,19 @@ def norm(path):
     return os.path.realpath(os.path.abspath(path)).replace("\\", "/").rstrip("/") or "/"
 
 
+def key(path):
+    """Comparable form of a norm()'d path: case-insensitive on Windows. (os.path.normcase would also turn its
+    slashes back into backslashes.)"""
+    return path.lower() if os.name == "nt" else path
+
+
 def same(a, b):
-    return os.path.normcase(a) == os.path.normcase(b)
+    return key(a) == key(b)
 
 
 def inside(path, root):
     """path is root or below it."""
-    path, root = os.path.normcase(path), os.path.normcase(root)
+    path, root = key(path), key(root)
     return path == root or path.startswith(root.rstrip("/") + "/")
 
 
