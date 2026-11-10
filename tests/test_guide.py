@@ -60,6 +60,19 @@ class Guide(unittest.TestCase):
         self.assertLessEqual(len(guide.split()), len(read(REPO, "templates", "AGENTS.md").split()))
 
 
+class Skills(unittest.TestCase):
+    def test_every_skill_has_a_global_version_without_workspace_paths(self):
+        names = sorted(os.listdir(os.path.join(REPO, "templates", "skills")))
+        self.assertEqual(sorted(os.listdir(os.path.join(GUIDE, "skills"))), names)
+        for name in names:
+            text = read(GUIDE, "skills", name, "SKILL.md")
+            for old in ("{{", ".orchestrator/", "odd/", "workspace", ".claude/workflows"):
+                self.assertNotIn(old, text, "%s still has %r" % (name, old))
+
+    def test_sync_memory_commits_through_hat(self):
+        self.assertIn("hat.py commit", read(GUIDE, "skills", "sync-memory", "SKILL.md"))
+
+
 class Agents(unittest.TestCase):
     def test_three_global_agents_with_hat_names(self):
         self.assertEqual(sorted(os.listdir(os.path.join(GUIDE, "agents"))),
