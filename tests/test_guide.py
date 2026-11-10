@@ -69,6 +69,11 @@ class Skills(unittest.TestCase):
             for old in ("{{", ".orchestrator/", "odd/", "workspace", ".claude/workflows"):
                 self.assertNotIn(old, text, "%s still has %r" % (name, old))
 
+    def test_the_guide_reads_skills_by_path_from_their_global_versions(self):
+        text = read(GUIDE, "AGENTS.md")
+        self.assertIn("<hat>/guide/skills/<name>/SKILL.md", text)
+        self.assertNotIn("<hat>/templates/skills/", text)
+
     def test_sync_memory_commits_through_hat(self):
         self.assertIn("hat.py commit", read(GUIDE, "skills", "sync-memory", "SKILL.md"))
 

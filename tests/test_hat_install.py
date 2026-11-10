@@ -77,7 +77,11 @@ class Install(unittest.TestCase):
         self.run_install("install")
         for name in ("hat-explorer", "hat-architect", "hat-dev"):
             self.assertTrue(os.path.isfile(os.path.join(self.claude, "agents", name + ".md")))
-        for name in os.listdir(os.path.join(REPO, "guide", "skills")):
+        # Only the skills the orchestrator invokes are global: every session on the machine lists their
+        # descriptions. Standards and the review are read by path from the brief.
+        for name in ("design-patterns", "software-principles", "pre-pr-review"):
+            self.assertFalse(os.path.lexists(os.path.join(self.claude, "skills", name)), name)
+        for name in ("sync-memory", "orchestrator-metrics"):
             for base in (os.path.join(self.claude, "skills"), os.path.join(self.home, ".agents", "skills")):
                 link = os.path.join(base, name)
                 self.assertTrue(os.path.isfile(os.path.join(link, "SKILL.md")), link)
@@ -140,6 +144,17 @@ class Install(unittest.TestCase):
         self.assertIn("hat-dev.md", out)
         self.assertIn("sync-memory", out)
         self.assertEqual(snapshot(self.claude), before)  # refused before the first write
+
+    def test_a_skill_no_longer_global_is_unlinked_on_the_next_install(self):
+        self.run_install("install")
+        old = os.path.join(self.claude, "skills", "pre-pr-review")
+        os.symlink(os.path.join(REPO, "guide", "skills", "pre-pr-review"), old)
+        m = os.path.join(self.home, ".hat", "install.json")
+        data = json.load(open(m))
+        data["links"].append(old)
+        json.dump(data, open(m, "w"))
+        self.run_install("install")
+        self.assertFalse(os.path.lexists(old))
 
     def test_check_reports_what_is_missing(self):
         code, out = self.run_install("check")
