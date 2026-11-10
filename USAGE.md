@@ -83,7 +83,8 @@ each repo's guide and history, and when you correct how it works or state a pref
   yes before moving to the latest release. Existing workspaces keep their files and their `TEMPLATE_VERSION`; ask the agent to
   bring a workspace up to date when you want it. It runs `scripts/update.sh`, which keeps every script you
   changed (the new version lands next to it as `<file>.new`), never touches your memory, task files or guide
-  text, and lists what needs you: the `.new` files and the *Workspaces* notes of `CHANGELOG.md`.
+  text, and lists what needs you: the `.new` files and the *Workspaces* notes of `CHANGELOG.md`. To keep your
+  version of a file for good, `--keep-mine` skips its `.new` until its template changes again.
 
 ## Local telemetry
 
