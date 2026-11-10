@@ -11,6 +11,13 @@ into the new version's section.
 
 ## Unreleased
 
+- `guide/` (global install G4): the guide every hat project will share, `guide/AGENTS.md`, the template of a
+  project's own rules, `guide/rules.md` (commands, repo guides, how the repos connect, rules), and the three global
+  agents `guide/agents/hat-explorer.md`, `hat-architect.md` and `hat-dev.md` (one dev agent for every repo, which
+  takes its repo, guide, commands and standards from the brief). All are built from `templates/` by
+  `scripts/build_guide.py`, so the flow keeps one source while both installs exist; a test fails when they drift.
+  No rule changes. Nothing uses them yet.
+
 - `scripts/hat.py` (global install G1): hat's home `~/.hat/` (`HAT_HOME` overrides it) with its project registry
   `projects.toml`. `hat project add [<root>]` registers a project (default: the git top level, or the folder for a
   multi-repo workspace) and creates `projects/<id>/` for its state; `project list` and `project move <id> <root>`;

@@ -27,8 +27,8 @@ class Guide(unittest.TestCase):
     def test_no_per_workspace_layout_is_left(self):
         for name in ("AGENTS.md", "agents/hat-explorer.md", "agents/hat-architect.md", "agents/hat-dev.md"):
             text = read(GUIDE, name)
-            for old in ("{{", "TODO(orchestrator-setup)", ".orchestrator/", "`memory/", ".agents/skills",
-                        "sync-skills", "workspace", "{{ROOT}}", "odd/tasks"):
+            for old in ("{{", "TODO(orchestrator-setup)", ".orchestrator/", "`memory/", "`.agents/skills",
+                        "sync-skills", "workspace", "{{ROOT}}", "odd/tasks", "under Layout", "root's skills", "``CODEX"):
                 self.assertNotIn(old, text, "%s still has %r" % (name, old))
 
     def test_paths_point_at_the_state_folder_and_the_clone(self):
