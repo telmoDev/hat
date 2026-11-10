@@ -11,6 +11,10 @@ into the new version's section.
 
 ## Unreleased
 
+- `update.sh --keep-mine`: a file the user changed is kept as it is, without a `.new`, and its declined template
+  recorded in `.orchestrator/update-keep`; the next updates offer it again only when its template changes.
+  Before, every update wrote the same `.new` next to each file the user had chosen to keep.
+
 - `AGENTS.md` › *Orchestrator role*: **Answers to the user**: lead with the result or the decision needed, don't
   repeat what the user knows, recommend one option instead of listing those not pursued, ask only what changes
   the outcome, all at once. Agents' reports were already capped; the orchestrator's own answers weren't.

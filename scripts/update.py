@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """Update a workspace set up with this skill (v0.1.0 or later) to the skill's templates. Run it as
-  bash update.sh [--dry-run] [--dev] <workspace-root>
+  bash update.sh [--dry-run] [--dev] [--keep-mine] <workspace-root>
 Conservative and idempotent; it never deletes and never commits:
   - a file the workspace lacks is created; one identical to the template of its TEMPLATE_VERSION (read from the
     skill's v<version> tag) is updated; one the user changed is kept as is, and the new template is written next
     to it as <file>.new for a manual merge. An earlier <file>.new with other content stops the update.
+    --keep-mine keeps each such file as it is, without a .new, and records the template it declined in
+    .orchestrator/update-keep: that file is offered again only when its template changes.
   - .claude/settings.json gets the template's telemetry and session handoff hooks it lacks; nothing else in it
     changes.
   - orchestrator.conf gets the keys it lacks, appended with their comments; no value changes but
@@ -19,6 +21,7 @@ the skill, not for workspaces in regular use. At the next release, a file it wro
 release matches neither version and comes as <file>.new (one the snapshot didn't change updates as usual).
 ORCH_UPDATE_FAIL_AT=<path> makes the step writing that path fail (tests only).
 """
+import hashlib
 import json
 import os
 import re
@@ -87,7 +90,16 @@ def add_telemetry_hooks(settings, template, scripts=("telemetry.sh",)):
     return added
 
 
-def plan(root, dev):
+def digest(text):
+    return hashlib.sha256(text.replace("\r\n", "\n").encode("utf-8")).hexdigest()[:16]
+
+
+KEEP = ".orchestrator/update-keep"
+KEEP_HEAD = ("# Files this workspace keeps as its own (update.sh --keep-mine): the update offers a file's template\n"
+             "# again only when it changes. Delete a line to be offered the current template again.\n")
+
+
+def plan(root, dev, keep_mine=False):
     """(ops, notes, versions) or Refuse. Reads only."""
     conf_path = os.path.join(root, ".orchestrator", "orchestrator.conf")
     conf = read(conf_path)
@@ -122,6 +134,9 @@ def plan(root, dev):
 
     root_shown = root.replace("\\", "/")
     ops, attention, conflicts = [], [], []
+    keep_text = read(os.path.join(root, *KEEP.split("/")))
+    kept = {rel: h for h, rel in re.findall(r"^([0-9a-f]{16}) (\S+)$", keep_text or "", re.M)}
+    kept_before = dict(kept)
 
     def managed(rel, new, ref):
         cur = read(os.path.join(root, rel))
@@ -131,6 +146,11 @@ def plan(root, dev):
             return
         elif ref is not None and same(cur, ref):
             ops.append({"rel": rel, "action": "update", "text": new})
+        elif kept.get(rel) == digest(new):
+            return  # the user kept theirs against this very template
+        elif keep_mine:
+            kept[rel] = digest(new)
+            ops.append({"rel": rel, "action": "keep", "note": "yours: offered again when its template changes"})
         else:
             copy = rel + ".new"
             old = read(os.path.join(root, copy))
@@ -157,7 +177,7 @@ def plan(root, dev):
             continue  # the workspace had it and removed it (a standard it keeps in a repo's own copy, or dropped)
         n = len(ops)
         managed(".agents/skills/%s/SKILL.md" % name, new, ref and ref.replace("{{ROOT}}", root_shown))
-        skills_changed = skills_changed or len(ops) > n
+        skills_changed = skills_changed or any(o["action"] != "keep" for o in ops[n:])
     if conflicts:
         raise Refuse("an earlier .new copy differs from this update's: merge or remove it, then run again: "
                      + ", ".join(conflicts))
@@ -195,6 +215,10 @@ def plan(root, dev):
 
     if claude and skills_changed:
         ops.append({"rel": ".claude/skills/", "action": "run", "note": "sync-skills.sh"})
+
+    if kept != kept_before:
+        ops.append({"rel": KEEP, "action": "merge" if keep_text is not None else "create",
+                    "text": KEEP_HEAD + "".join("%s %s\n" % (kept[r], r) for r in sorted(kept))})
 
     # orchestrator.conf last: the keys it lacks, then the version.
     appended, block = [], []
@@ -246,7 +270,9 @@ def execute(root, ops):
         try:
             if fail_at and op["rel"] == fail_at:
                 raise OSError("simulated failure (ORCH_UPDATE_FAIL_AT)")
-            if op["action"] == "run":
+            if op["action"] == "keep":
+                pass
+            elif op["action"] == "run":
                 # The bash on PATH: on Windows a bare "bash" can resolve to WSL's in System32 before Git Bash.
                 r = subprocess.run([shutil.which("bash") or "bash", ".orchestrator/scripts/sync-skills.sh"], cwd=root,
                                    capture_output=True, encoding="utf-8", errors="replace")
@@ -284,14 +310,14 @@ def main(argv):
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")  # the CHANGELOG steps aren't ASCII; Windows pipes default to cp1252
     args = argv[1:]
-    dry, dev = "--dry-run" in args, "--dev" in args
-    rest = [a for a in args if a not in ("--dry-run", "--dev")]
+    dry, dev, keep_mine = "--dry-run" in args, "--dev" in args, "--keep-mine" in args
+    rest = [a for a in args if a not in ("--dry-run", "--dev", "--keep-mine")]
     if len(rest) != 1:
         print(__doc__.strip(), file=sys.stderr)
         return 2
     root = os.path.abspath(rest[0])
     try:
-        ops, attention, v = plan(root, dev)
+        ops, attention, v = plan(root, dev, keep_mine)
     except Refuse as err:
         print("update: refused: %s\nNothing was changed." % err)
         return 1
