@@ -11,6 +11,12 @@ into the new version's section.
 
 ## Unreleased
 
+- `harness.py doctor` and [docs/harnesses.md](docs/harnesses.md): the harness capability contract (meta-harness X2).
+  Each runtime declares what it can really do for hat (`health_check`, `collect_events`, `usage`, `execute`,
+  `status`, `cancel`) as `verified`, `unverified` or `unsupported`; Claude Code has events, usage and its health
+  check verified, Codex nothing yet. `doctor` says whether each runtime is installed and wired in the workspace
+  (naming any missing hook). No network, no model calls, never starts a session; nothing in the flow uses it yet.
+
 - `knowledge.py validate|index` (meta-harness K1): OKF v0.2 knowledge bundles. `validate` checks OKF conformance
   (permissive: unknown types, keys and broken links are never errors) plus provenance (`sources`), trust
   (`generated`, `verified`, actors, ISO timestamps with an offset), lifecycle (`status`, `stale_after`), the
