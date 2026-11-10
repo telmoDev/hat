@@ -9,6 +9,8 @@ Conservative and idempotent; it never deletes and never commits:
     changes.
   - orchestrator.conf gets the keys it lacks, appended with their comments; no value changes but
     TEMPLATE_VERSION, set last, so a partial run never claims the new version.
+  - a skill the workspace's version had and the workspace removed is not recreated: standards may live in a
+    repo's own copy, or be dropped.
   - text the user adapts (AGENTS.md, CLAUDE.md, odd/README.md, memory/, task files) is never edited: the
     CHANGELOG's Workspaces steps since the workspace's version are printed for the agent or the user to apply.
 Everything is checked and planned before the first write. A failure midway lists what was done and what is
@@ -151,6 +153,8 @@ def plan(root, dev):
     for name in sorted(os.listdir(os.path.join(TPL, "skills"))):
         new = read(os.path.join(TPL, "skills", name, "SKILL.md")).replace("{{ROOT}}", root_shown)
         ref = at_version(src, "skills/%s/SKILL.md" % name)
+        if ref is not None and not os.path.exists(os.path.join(root, ".agents", "skills", name)):
+            continue  # the workspace had it and removed it (a standard it keeps in a repo's own copy, or dropped)
         n = len(ops)
         managed(".agents/skills/%s/SKILL.md" % name, new, ref and ref.replace("{{ROOT}}", root_shown))
         skills_changed = skills_changed or len(ops) > n

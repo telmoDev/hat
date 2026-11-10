@@ -11,6 +11,10 @@ into the new version's section.
 
 ## Unreleased
 
+- `scripts/update.py` no longer recreates a root skill the workspace had and removed (a standard it keeps in a
+  repo's own copy, or dropped); skills new since the workspace's version are still created. `sync-skills.sh`
+  leaves the update's `.new` copies out of `.claude/skills/`.
+
 - `harness.py doctor` and [docs/harnesses.md](docs/harnesses.md): the harness capability contract (meta-harness X2).
   Each runtime declares what it can really do for hat (`health_check`, `collect_events`, `usage`, `execute`,
   `status`, `cancel`) as `verified`, `unverified` or `unsupported`; Claude Code has events, usage and its health
