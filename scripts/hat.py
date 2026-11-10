@@ -4,11 +4,16 @@
   python3 scripts/hat.py project add [<root>]        register a project (default: the git top level, or the folder)
   python3 scripts/hat.py project list                every project, with "missing" when its root is gone
   python3 scripts/hat.py project move <id> <root>    point a project at its new root
+  python3 scripts/hat.py context [<folder>]          the session-start header of the project, as hook JSON
+  python3 scripts/hat.py commit <message>            commit the current project's state in hat's home
+  python3 scripts/hat.py resolve-payload < payload   resolve the "cwd" of a hook's JSON: "<id>\t<root>\t<state>"
 The home is ~/.hat (HAT_HOME overrides it): projects.toml is the registry, projects/<id>/ each project's state.
+The home is a local git repo (no remote unless the user adds one); telemetry, handoff and tmp stay out of it.
 Nothing is ever written inside a project. `resolve` reads only and prints nothing outside a project, so a hook can
 call it in every session. Standard library only, no network, no model calls.
 """
 import hashlib
+import json
 import os
 import re
 import subprocess
@@ -85,6 +90,70 @@ def default_root(cwd):
     return p.stdout.strip() if p.returncode == 0 and p.stdout.strip() else cwd
 
 
+CLONE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+IGNORE = ("# hat's home: what is regenerated or local to a session stays out of git.\n"
+          "projects/*/telemetry.db*\nprojects/*/handoff/\nprojects/*/tmp/\n*.tmp\n")
+
+
+def state(pid):
+    return os.path.join(home(), "projects", pid)
+
+
+def git(*args):
+    return subprocess.run(["git", "-C", home()] + list(args), capture_output=True, encoding="utf-8",
+                          errors="replace")
+
+
+def record(message, *paths):
+    """Commit paths (relative to the home) with message; the home becomes a git repo on first use. Returns
+    "committed", "nothing to commit" or the error, and never raises: a registration never depends on git."""
+    try:
+        if not os.path.isdir(os.path.join(home(), ".git")):
+            if git("init", "-q").returncode != 0:
+                return "git init failed"
+            with open(os.path.join(home(), ".gitignore"), "w", encoding="utf-8", newline="\n") as f:
+                f.write(IGNORE)
+            paths += (".gitignore",)
+        git("add", "-A", "--", *paths)
+        if git("diff", "--cached", "--quiet").returncode == 0:
+            return "nothing to commit"
+        who = [] if git("config", "user.email").stdout.strip() else ["-c", "user.name=hat", "-c", "user.email=hat@localhost"]
+        p = subprocess.run(["git", "-C", home()] + who + ["commit", "-q", "-m", message], capture_output=True,
+                           encoding="utf-8", errors="replace")
+        return "committed" if p.returncode == 0 else "git commit failed: " + (p.stderr or p.stdout).strip()[:200]
+    except OSError as err:
+        return "git: %s" % err
+
+
+def config(pid):
+    out = {}
+    try:
+        with open(os.path.join(state(pid), "config"), encoding="utf-8") as f:
+            for line in f:
+                m = re.match(r'\s*([A-Z_]+)=["\']?(.*?)["\']?\s*$', line)
+                if m:
+                    out[m.group(1)] = m.group(2)
+    except OSError:
+        pass
+    return out
+
+
+def context(folder):
+    """The session-start header: which project, where its state, guide and rules are. Short on purpose."""
+    hit = resolve(folder)
+    if not hit:
+        return None
+    pid, root = hit
+    st, conf = norm(state(pid)), config(pid)
+    lines = ["hat project %s · root %s · state %s" % (pid, root, st),
+             "Guide: %s/guide/AGENTS.md: read it before anything else, then the project rules: %s/rules.md."
+             % (norm(CLONE), st),
+             "In the guide, <hat> is %s, <root> is %s and <state> is %s." % (norm(CLONE), root, st)]
+    if conf.get("REPOS"):
+        lines.append("Repos: %s%s" % (conf["REPOS"], " · bases: " + conf["BASE_BRANCHES"] if conf.get("BASE_BRANCHES") else ""))
+    return "\n".join(lines)
+
+
 def fail(msg):
     print("hat: " + msg, file=sys.stderr)
     return 1
@@ -106,8 +175,11 @@ def add(root):
     pid = "%s-%s" % (name, hashlib.sha256(root.encode("utf-8")).hexdigest()[:6])
     projects[pid] = {"root": root}
     save(projects)
-    os.makedirs(os.path.join(home(), "projects", pid), exist_ok=True)
+    os.makedirs(state(pid), exist_ok=True)
     print("%s\t%s" % (pid, root))
+    note = record("hat: add project " + pid, "projects.toml", "projects/" + pid)
+    if note not in ("committed", "nothing to commit"):
+        print("hat: registered, but not recorded in git: " + note, file=sys.stderr)
     return 0
 
 
@@ -124,6 +196,7 @@ def move(pid, root):
     projects[pid]["root"] = root
     save(projects)
     print("%s\t%s" % (pid, root))
+    record("hat: move project %s to %s" % (pid, root), "projects.toml")
     return 0
 
 
@@ -134,6 +207,27 @@ def main(argv):
         if hit:
             print("%s\t%s" % hit)
         return 0 if hit else 1
+    if args[:1] == ["resolve-payload"] and len(args) == 1:
+        try:
+            payload = json.loads(sys.stdin.read() or "{}")
+        except ValueError:
+            return 1
+        hit = resolve(payload.get("cwd") or os.getcwd()) if isinstance(payload, dict) else None
+        if hit:
+            print("%s\t%s\t%s" % (hit[0], hit[1], norm(state(hit[0]))))
+        return 0 if hit else 1
+    if args[:1] == ["context"] and len(args) <= 2:
+        text = context(args[1] if len(args) == 2 else os.getcwd())
+        if text:
+            print(json.dumps({"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": text}}))
+        return 0
+    if args[:1] == ["commit"] and len(args) == 2:
+        hit = resolve(os.getcwd())
+        if not hit:
+            return fail("not in a hat project: " + norm(os.getcwd()))
+        note = record("%s: %s" % (hit[0], args[1]), "projects/" + hit[0])
+        print(note)
+        return 0 if note in ("committed", "nothing to commit") else 1
     if args[:2] == ["project", "add"] and len(args) <= 3:
         return add(args[2] if len(args) == 3 else default_root(os.getcwd()))
     if args[:2] == ["project", "list"] and len(args) == 2:

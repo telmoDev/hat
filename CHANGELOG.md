@@ -11,6 +11,14 @@ into the new version's section.
 
 ## Unreleased
 
+- Global install G2b: `scripts/hat-hook.sh <hook>`, the one entry the global hooks will call. It finds the project
+  from the event's `cwd`; outside a registered project, or in one that still has its own layer, it does nothing;
+  otherwise it runs the hook with the project's state. `hat context` prints the session-start header (project,
+  root, state, where the guide and the project's rules are, its repos). hat's home is a local git repo: each
+  registration is a commit, `hat commit <message>` records the current project's memory and tasks (telemetry,
+  handoff and tmp stay out), and `sync-memory` uses it under the global install. A script the orchestrator runs by
+  hand from the clone finds its project from the folder it runs in. Nothing is wired yet (G3).
+
 - Global install G2a: every script finds the project's files through `layout.py` / `layout.sh`. In a workspace
   nothing changes. With `HAT_STATE` (the project's `~/.hat/projects/<id>/`) and `HAT_ROOT` set, as the global
   hooks will set them, the config, memory, task files (`tasks/`), telemetry store, session handoff and pre-PR

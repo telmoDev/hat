@@ -11,6 +11,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import unittest.mock
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(HERE)
@@ -75,7 +76,10 @@ class State(unittest.TestCase):
         self.assertEqual((got.project, got.task_prefix), ("shop-abc123", "tasks/"))
 
     def test_without_hat_state_nothing_changes(self):
-        ws = layout.of("/w")
+        with unittest.mock.patch.dict(os.environ, {"HAT_HOME": os.path.join(self.tmp, "empty-home")}):
+            for k in ("HAT_STATE", "HAT_ROOT", "HAT_PROJECT"):
+                os.environ.pop(k, None)
+            ws = layout.of("/w")
         self.assertEqual(ws.conf.replace("\\", "/"), "/w/.orchestrator/orchestrator.conf")
         self.assertEqual(ws.tasks.replace("\\", "/"), "/w/odd/tasks")
 
@@ -113,6 +117,42 @@ class State(unittest.TestCase):
         p = self.run_tpl("scripts/pre-pr-pass.sh", ".", branch)
         self.assertEqual(p.returncode, 0, p.stderr)
         self.assertTrue(os.listdir(os.path.join(self.state, "tmp", "pre-pr")))
+
+
+class ByHand(unittest.TestCase):
+    """A script the orchestrator runs by hand from the clone finds its project from the folder it runs in."""
+
+    def setUp(self):
+        self.tmp = os.path.realpath(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.root = os.path.join(self.tmp, "shop")
+        os.makedirs(self.root)
+        self.env = dict(os.environ, HAT_HOME=os.path.join(self.tmp, "home"))
+        for k in ("HAT_STATE", "HAT_ROOT", "HAT_PROJECT"):
+            self.env.pop(k, None)
+        p = subprocess.run([sys.executable, os.path.join(REPO, "scripts", "hat.py"), "project", "add", self.root],
+                           capture_output=True, encoding="utf-8", env=self.env)
+        self.state = os.path.join(self.tmp, "home", "projects", p.stdout.split()[0])
+        os.makedirs(os.path.join(self.state, "memory"))
+        with open(os.path.join(self.state, "config"), "w") as f:
+            f.write('REPOS="."\n')
+        with open(os.path.join(self.state, "memory", "PROGRESS.md"), "w") as f:
+            f.write("# Progress\n\ntoken: abc123secret\n")
+
+    def test_a_python_script(self):
+        p = subprocess.run([sys.executable, os.path.join(TPL, "scripts", "memory-check.py")], capture_output=True,
+                           encoding="utf-8", env=self.env, cwd=self.root, timeout=60)
+        self.assertIn("PROGRESS.md:3: looks like a secret", p.stdout + p.stderr)
+
+    def test_a_bash_script(self):
+        p = subprocess.run([BASH, os.path.join(TPL, "hooks", "session-memory.sh")], capture_output=True,
+                           encoding="utf-8", env=self.env, cwd=self.root, timeout=60)
+        self.assertEqual(p.returncode, 0, p.stderr)
+        with open(os.path.join(self.state, "memory", "NEXT_STEPS.md"), "w") as f:
+            f.write("# Next\n\n- by hand\n")
+        p = subprocess.run([BASH, os.path.join(TPL, "hooks", "session-memory.sh")], capture_output=True,
+                           encoding="utf-8", env=self.env, cwd=self.root, timeout=60)
+        self.assertIn("by hand", p.stdout)
 
 
 if __name__ == "__main__":
