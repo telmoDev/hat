@@ -5,6 +5,8 @@
   python3 scripts/hat.py project list                every project, with "missing" when its root is gone
   python3 scripts/hat.py project move <id> <root>    point a project at its new root
   python3 scripts/hat.py project remove <id>         unregister a project; its state stays in the home
+  python3 scripts/hat.py status                      every project: its layer, resume point, active tasks, last session
+  python3 scripts/hat.py doctor                      is hat installed and healthy on this machine (exit 1 if not)
   python3 scripts/hat.py context [<folder>]          the session-start header of the project, as hook JSON
   python3 scripts/hat.py commit <message>            commit the current project's state in hat's home
   python3 scripts/hat.py resolve-payload < payload   resolve the "cwd" of a hook's JSON: "<id>\t<root>\t<state>"
@@ -163,6 +165,107 @@ def context(folder):
     return "\n".join(lines)
 
 
+STATUS = re.compile(r"^Status:\s*(\w+)(?:.*?·\s*Next:\s*(.*))?$", re.M)
+
+
+def _resume(pid):
+    """The first item under ## Resume in the project's NEXT_STEPS, or None."""
+    try:
+        with open(os.path.join(state(pid), "memory", "NEXT_STEPS.md"), encoding="utf-8") as f:
+            text = f.read()
+    except OSError:
+        return None
+    m = re.search(r"^## Resume\s*\n((?:- .*\n?)+)", text, re.M)
+    first = m.group(1).splitlines()[0][2:].strip() if m else ""
+    return first if first and first.lower() != "none" else None
+
+
+def _active_tasks(pid):
+    folder, out = os.path.join(state(pid), "tasks"), []
+    for name in sorted(os.listdir(folder)) if os.path.isdir(folder) else []:
+        if not name.endswith(".md"):
+            continue
+        with open(os.path.join(folder, name), encoding="utf-8") as f:
+            m = STATUS.search(f.read())
+        if m and m.group(1) == "active":
+            out.append("%s: %s" % (name[:-3], (m.group(2) or "—").strip()))
+    return out
+
+
+def _last_session(pid):
+    db = os.path.join(state(pid), "telemetry.db")
+    if not os.path.isfile(db):
+        return None
+    import sqlite3
+    try:
+        con = sqlite3.connect("file:%s?mode=ro" % db.replace("\\", "/"), uri=True, timeout=1)
+        try:
+            row = con.execute("SELECT max(coalesce(finished_at, started_at)), count(*) FROM runs").fetchone()
+        finally:
+            con.close()
+    except sqlite3.Error:
+        return None
+    return "%s · %d sessions" % row if row and row[0] else None
+
+
+def status():
+    projects = load()
+    if not projects:
+        print("hat: no projects registered (python3 %s/scripts/hat.py project add, from a project's root)"
+              % norm(CLONE))
+        return 0
+    for pid, p in sorted(projects.items()):
+        root = p["root"]
+        if not os.path.isdir(root):
+            layer = "root missing (hat project move %s <root>, or remove)" % pid
+        elif os.path.isdir(os.path.join(root, ".orchestrator")):
+            layer = "own layer: hat leaves it alone until it is migrated"
+        else:
+            layer = "hat"
+        tasks = _active_tasks(pid)
+        print("%s  %s" % (pid, root))
+        print("  layer: " + layer)
+        print("  resume: " + (_resume(pid) or "—"))
+        print("  tasks: " + ("%d active · %s" % (len(tasks), "; ".join(tasks)) if tasks else "none active"))
+        print("  last session: " + (_last_session(pid) or "—"))
+    return 0
+
+
+def doctor():
+    problems, lines = 0, []
+    def say(ok, text):
+        nonlocal problems
+        problems += 0 if ok else 1
+        lines.append(("ok      " if ok else "problem ") + text)
+    say(sys.version_info >= (3, 8), "python %d.%d" % sys.version_info[:2])
+    import shutil
+    claude = shutil.which("claude")
+    version = None
+    if claude:
+        try:
+            version = subprocess.run([claude, "--version"], capture_output=True, encoding="utf-8", timeout=5,
+                                     errors="replace").stdout.strip().splitlines()[0]
+        except (OSError, subprocess.SubprocessError, IndexError):
+            pass
+    say(bool(claude), "claude: " + (version or "installed") if claude else "claude: not found on PATH")
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import hat_install
+    lacking = hat_install.missing()
+    say(not lacking, "global install" + (": missing %d (bash install.sh --global)" % len(lacking) if lacking else ""))
+    if os.path.isdir(home()):
+        dirty = git("status", "--porcelain").stdout.strip() if os.path.isdir(os.path.join(home(), ".git")) else None
+        say(dirty is not None, "hat's home %s is a git repo" % norm(home()) if dirty is not None
+            else "hat's home %s is not a git repo yet (it becomes one at the first project add)" % norm(home()))
+        if dirty:
+            lines.append("note    hat's home has uncommitted changes: %d paths" % len(dirty.splitlines()))
+    for pid, p in sorted(load().items()):
+        say(os.path.isdir(p["root"]), "project %s: %s" % (pid, p["root"] if os.path.isdir(p["root"])
+                                                          else "root missing: " + p["root"]))
+    print("\n".join(lines))
+    print("hat doctor: " + ("ok" if not problems else "%d problem(s)" % problems))
+    return 1 if problems else 0
+
+
 def fail(msg):
     print("hat: " + msg, file=sys.stderr)
     return 1
@@ -222,6 +325,8 @@ def move(pid, root):
 
 
 def main(argv):
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")  # status prints "—" and "·"; Windows pipes default to cp1252
     args = argv[1:]
     if args[:1] == ["resolve"] and len(args) <= 2:
         hit = resolve(args[1] if len(args) == 2 else os.getcwd())
@@ -237,6 +342,10 @@ def main(argv):
         if hit:
             print("%s\t%s\t%s" % (hit[0], hit[1], norm(state(hit[0]))))
         return 0 if hit else 1
+    if args == ["status"]:
+        return status()
+    if args == ["doctor"]:
+        return doctor()
     if args[:1] == ["context"] and len(args) <= 2:
         text = context(args[1] if len(args) == 2 else os.getcwd())
         if text:
