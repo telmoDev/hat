@@ -39,7 +39,7 @@ def snapshot(root):
     return out
 
 
-class Migrate(unittest.TestCase):
+class Workspace(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.tmp = os.path.realpath(tempfile.mkdtemp())
@@ -116,6 +116,9 @@ class Migrate(unittest.TestCase):
         with open(os.path.join(self.state(), *rel.split("/")), encoding="utf-8") as f:
             return f.read()
 
+
+
+class Migrate(Workspace):
     def test_dry_run_writes_nothing(self):
         code, out = self.migrate("--dry-run")
         self.assertEqual(code, 0, out)
@@ -186,6 +189,74 @@ class Migrate(unittest.TestCase):
                            encoding="utf-8", env=self.env)
         self.assertEqual(p.returncode, 1)
         self.assertIn("not a workspace", p.stdout + p.stderr)
+
+
+class Cleanup(Workspace):
+    """--cleanup, after a verified migration: one commit removes hat's layer files and nothing else."""
+
+    def tearDown(self):
+        shutil.rmtree(self.ws + "-home", ignore_errors=True)
+
+    def hook(self, name, cwd):
+        return subprocess.run([BASH, os.path.join(REPO, "scripts", "hat-hook.sh"), name],
+                              input=json.dumps({"cwd": cwd, "session_id": "s1"}), capture_output=True,
+                              encoding="utf-8", env=self.env, timeout=60)
+
+    def own_extras(self):
+        # The user's own skill and settings, which cleanup must keep.
+        os.makedirs(os.path.join(self.ws, ".agents", "skills", "tickets"))
+        with open(os.path.join(self.ws, ".agents", "skills", "tickets", "SKILL.md"), "w") as f:
+            f.write("---\nname: tickets\n---\nmine\n")
+        p = os.path.join(self.ws, ".claude", "settings.json")
+        s = json.load(open(p))
+        s.setdefault("permissions", {})["allow"] = ["Bash(make test)"]
+        json.dump(s, open(p, "w"), indent=2)
+        git("add", "-A", cwd=self.ws, env=self.genv)
+        git("commit", "-qm", "extras", cwd=self.ws, env=self.genv)
+
+    def test_cleanup_needs_a_migration(self):
+        code, out = self.migrate("--cleanup")
+        self.assertEqual(code, 1)
+        self.assertIn("not migrated", out)
+
+    def test_cleanup_refuses_when_the_layer_changed_since(self):
+        self.migrate()
+        self.edit("memory/NEXT_STEPS.md", lambda s: s + "\n- later\n")
+        git("commit", "-qam", "later", cwd=self.ws, env=self.genv)
+        code, out = self.migrate("--cleanup")
+        self.assertEqual(code, 1)
+        self.assertIn("changed since", out)
+        self.assertTrue(os.path.isdir(os.path.join(self.ws, ".orchestrator")))
+
+    def test_cleanup_removes_only_hats_files_in_one_commit(self):
+        self.own_extras()
+        api_before = snapshot(os.path.join(self.ws, "api"))
+        self.assertEqual(self.migrate()[0], 0)
+        code, out = self.migrate("--cleanup")
+        self.assertEqual(code, 0, out)
+        for gone in ("AGENTS.md", "CLAUDE.md", ".orchestrator", "memory", "odd", ".agents/skills/sync-memory",
+                     ".claude/skills/sync-memory", ".claude/workflows", ".claude/agents/explorer.md"):
+            self.assertFalse(os.path.exists(os.path.join(self.ws, *gone.split("/"))), gone)
+        self.assertTrue(os.path.isfile(os.path.join(self.ws, ".agents", "skills", "tickets", "SKILL.md")))
+        s = json.load(open(os.path.join(self.ws, ".claude", "settings.json")))
+        self.assertEqual(s["permissions"]["allow"], ["Bash(make test)"])
+        self.assertNotIn(".orchestrator/", json.dumps(s.get("hooks", {})))
+        self.assertEqual(snapshot(os.path.join(self.ws, "api")), api_before)  # the app repo is never touched
+        log = git("log", "--format=%s", cwd=self.ws, env=self.genv).decode()
+        self.assertTrue(log.startswith("chore: move the orchestration layer to hat"), log)
+        self.assertEqual(git("status", "--porcelain", cwd=self.ws, env=self.genv), b"")
+        header = self.hook("context", self.ws).stdout  # the project now runs on hat
+        self.assertIn("hat project", header)
+
+    def test_session_start_offers(self):
+        self.assertIn("hat.py migrate", self.hook("context", self.ws).stdout)  # an old layer, not registered
+        self.migrate()
+        self.assertIn("--cleanup", self.hook("context", self.ws).stdout)  # migrated, old layer still there
+        plain = os.path.join(self.ws + "-home", "plain")
+        os.makedirs(plain)
+        self.assertEqual(self.hook("context", plain).stdout, "")  # not a git repo: nothing
+        git("init", "-q", plain, env=self.genv)
+        self.assertIn("project add", self.hook("context", plain).stdout)  # an unregistered repo (G-D1)
 
 
 if __name__ == "__main__":

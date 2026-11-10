@@ -11,6 +11,14 @@ into the new version's section.
 
 ## Unreleased
 
+- Global install G6b: `hat migrate <workspace> --cleanup`, after a verified migration and only when the layer is
+  unchanged since, removes hat's old layer in one commit at the workspace root (git can undo it): `AGENTS.md`,
+  `CLAUDE.md`, `.orchestrator/`, `memory/`, `odd/`, hat's skills, agents and workflow, and hat's hooks inside
+  `.claude/settings.json` and `.codex/hooks.json`. The user's own skills and settings and the app repos are never
+  touched; the project then runs on hat. At session start, where hat isn't running yet, one line offers the next
+  step: migrate a workspace with the old layer, clean up a migrated one, or register an unregistered git repo
+  (decision G-D1).
+
 - Global install G6a: `hat migrate <workspace> [--dry-run]` moves a workspace with the per-project layer to the
   global install, saving what is the project's first. Each layer file is compared with the templates of its
   `TEMPLATE_VERSION`, of every later release and of the current clone (placeholders filled at setup count as
