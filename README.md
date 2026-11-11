@@ -55,12 +55,15 @@ verified payloads.
 
 ## Where it is going
 
-The plan is in [docs/meta-harness/roadmap.md](docs/meta-harness/roadmap.md): phases that each end in a release
+The plan is in [docs/meta-harness/roadmap.md](docs/meta-harness/roadmap.md): steps that each end in a release
 with an evidence gate. Done: the telemetry phase (v0.8.0) and the global install (v0.9.0,
-[design](docs/meta-harness/global-install.md)). Next: a measured baseline of where tokens go, then a harness
-capability contract, project knowledge in OKF, governance policies, code and agent intelligence, up to
-coordinating approved tasks across projects and harnesses. A feature that claims to save tokens has to beat the
-measured baseline, or it stays opt-in.
+[design](docs/meta-harness/global-install.md)). Now: consolidating v0.9 and a measured baseline of where tokens
+go. Then, first, two engines: a **Knowledge Engine** (reliable memory: what happened, what the project knows,
+why it chose what it did, how its tasks are done, retrieved for the task at hand) and a **Direction Engine**
+(objectives, tasks, dependencies, deviations caught while they are cheap, results validated). After them: deeper
+harness integration, observability and governance; then other harnesses; then optimization. hat gives the model
+structure and evidence rather than rigid rules, and doesn't duplicate what the harness does natively. A feature
+that adds context or claims to save tokens has to beat the measured baseline, or it stays opt-in.
 
 ## Requirements
 
