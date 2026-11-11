@@ -11,6 +11,11 @@ into the new version's section.
 
 ## Unreleased
 
+- The test suite is hermetic: every test module imports `tests/hermetic.py` first (a test checks it), so no test
+  reads or writes the real hat home, even where this clone is a registered hat project; `smoke.sh` does the same.
+  `tests/__init__.py` lets one module run as `tests.test_<name>`. The unreleased-skill update test uses an
+  untagged clone, so it no longer fails on the commit of a release.
+
 - `hat migrate --refresh`, for a workspace still in use between its migration and its cleanup: brings its new
   memory, task files, telemetry, handoff and layer copy into hat's state, keeps the reviewed `rules.md` and
   `config`, appends any project paragraph new since the migration to `rules.md`, and reports conf keys that now
