@@ -260,5 +260,54 @@ class Cleanup(Workspace):
         self.assertIn("project add", self.hook("context", plain).stdout)  # an unregistered repo (G-D1)
 
 
+class Refresh(Workspace):
+    """--refresh: a workspace still in use between its migration and its cleanup."""
+
+    def tearDown(self):
+        shutil.rmtree(self.ws + "-home", ignore_errors=True)
+
+    def test_a_git_wrapper_inside_the_layer_moves_to_the_state(self):
+        os.makedirs(os.path.join(self.ws, ".orchestrator", "scripts"), exist_ok=True)
+        with open(os.path.join(self.ws, ".orchestrator", "scripts", "gh-git.sh"), "w", newline="\n") as f:
+            f.write("#!/usr/bin/env bash\nrepo=$1; shift; exec git -C \"$repo\" \"$@\"\n")
+        self.edit(".orchestrator/orchestrator.conf",
+                  lambda s: s.replace('GIT_WRAPPER=""', 'GIT_WRAPPER=".orchestrator/scripts/gh-git.sh"'))
+        git("add", "-A", cwd=self.ws, env=self.genv)
+        git("commit", "-qm", "wrapper", cwd=self.ws, env=self.genv)
+        self.assertEqual(self.migrate()[0], 0)
+        moved = os.path.join(self.state(), "bin", "gh-git.sh")
+        self.assertTrue(os.path.isfile(moved))
+        self.assertIn('GIT_WRAPPER="%s"' % moved.replace("\\", "/"), self.read_state("config"))
+
+    def test_refresh_needs_a_migration(self):
+        code, out = self.migrate("--refresh")
+        self.assertEqual(code, 1)
+        self.assertIn("not migrated", out)
+
+    def test_refresh_brings_the_new_state_and_keeps_the_review(self):
+        self.assertEqual(self.migrate()[0], 0)
+        with open(os.path.join(self.state(), "rules.md"), "a", encoding="utf-8") as f:
+            f.write("\n- Reviewed with the user.\n")
+        with open(os.path.join(self.state(), "config"), "a", encoding="utf-8") as f:
+            f.write('TICKETS="github"\n')
+        self.edit("memory/NEXT_STEPS.md", lambda s: s + "\n- after the migration\n")
+        with open(os.path.join(self.ws, "odd", "tasks", "cart.md"), "w", encoding="utf-8") as f:
+            f.write("# cart\n\nStatus: active · Next: T1\n")
+        new_rule = "- Deploys need a second reviewer."
+        self.edit("AGENTS.md", lambda s: s.replace(RULE, RULE + "\n" + new_rule))
+        git("add", "-A", cwd=self.ws, env=self.genv)
+        git("commit", "-qm", "work after the migration", cwd=self.ws, env=self.genv)
+        self.assertEqual(self.migrate("--cleanup")[0], 1)  # out of date: refused
+        code, out = self.migrate("--refresh")
+        self.assertEqual(code, 0, out)
+        self.assertIn("after the migration", self.read_state("memory/NEXT_STEPS.md"))
+        self.assertTrue(os.path.isfile(os.path.join(self.state(), "tasks", "cart.md")))
+        rules = self.read_state("rules.md")
+        self.assertIn("- Reviewed with the user.", rules)  # the review is kept
+        self.assertIn(new_rule, rules.split("## Added since the migration")[1])
+        self.assertIn('TICKETS="github"', self.read_state("config"))  # the state's config is kept
+        self.assertEqual(self.migrate("--cleanup")[0], 0)
+
+
 if __name__ == "__main__":
     unittest.main()

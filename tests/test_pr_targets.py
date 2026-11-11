@@ -133,6 +133,21 @@ class Git(unittest.TestCase):
         self.assertIn("token=tok-bot", self.gh_calls())
 
 
+class Wrapper(Git):
+    def test_an_absolute_git_wrapper_is_used_as_it_is(self):
+        log = os.path.join(self.tmp, "wrapper.log")
+        wrapper = os.path.join(self.tmp, "elsewhere", "gh-git.sh")
+        os.makedirs(os.path.dirname(wrapper))
+        with open(wrapper, "w", newline="\n") as f:
+            f.write('#!/usr/bin/env bash\necho "$*" >> "%s"\nrepo=$1; shift\nexec git -C "%s/$repo" "$@"\n'
+                    % (log.replace("\\", "/"), self.ws.replace("\\", "/")))
+        self.conf('GIT_WRAPPER="%s"\n' % wrapper.replace("\\", "/"))
+        p = self.push()
+        self.assertEqual(p.returncode, 0, p.stderr)
+        with open(log) as f:
+            self.assertIn("api fetch -q origin main", f.read())
+
+
 class Secret(unittest.TestCase):
     def test_a_long_branch_slug_is_not_a_secret(self):
         self.assertIsNone(session_handoff.SECRET.search("branch soporte-enero-2026-ajustes-reportes-y-exportacion-v2"))

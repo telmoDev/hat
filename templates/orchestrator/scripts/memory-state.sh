@@ -19,7 +19,7 @@ end='<!-- state:end -->'
 
 grep -qF "$begin" "$file" && grep -qF "$end" "$file" || { echo "memory-state: markers missing in $file" >&2; exit 1; }
 
-rgit() { local r=$1; shift; if [ -n "${GIT_WRAPPER:-}" ]; then bash "$root/$GIT_WRAPPER" "$r" "$@"; else git -C "$root/$r" "$@"; fi; }
+rgit() { local r=$1; shift; if [ -n "${GIT_WRAPPER:-}" ]; then bash "$(git_wrapper)" "$r" "$@"; else git -C "$root/$r" "$@"; fi; }
 label() { [ "$1" = "." ] && basename "$root" || echo "$1"; }
 base() { # BASE_BRANCHES entry, else origin/HEAD, else main, else master
   local kv b
