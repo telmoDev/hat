@@ -249,6 +249,27 @@ class Cleanup(Workspace):
         header = self.hook("context", self.ws).stdout  # the project now runs on hat
         self.assertIn("hat project", header)
 
+    def test_cleanup_never_follows_a_link_into_a_repo(self):
+        # A workspace whose root .claude/agents is a link to an app repo's own agents (they live in the repo).
+        agents = os.path.join(self.ws, "api", ".claude", "agents")
+        os.makedirs(agents)
+        for name in ("explorer.md", "architect.md", "api-dev.md"):
+            with open(os.path.join(agents, name), "w") as f:
+                f.write("the repo's own agent\n")
+        git("add", "-A", cwd=os.path.join(self.ws, "api"), env=self.genv)
+        git("commit", "-qm", "agents", cwd=os.path.join(self.ws, "api"), env=self.genv)
+        root_agents = os.path.join(self.ws, ".claude", "agents")
+        shutil.rmtree(root_agents, ignore_errors=True)
+        os.symlink(os.path.join("..", "api", ".claude", "agents"), root_agents)
+        git("add", "-A", cwd=self.ws, env=self.genv)
+        git("commit", "-qm", "agents live in the repo", cwd=self.ws, env=self.genv)
+        api_before = snapshot(os.path.join(self.ws, "api"))
+        self.assertEqual(self.migrate()[0], 0)
+        code, out = self.migrate("--cleanup")
+        self.assertEqual(code, 0, out)
+        self.assertEqual(snapshot(os.path.join(self.ws, "api")), api_before)  # the repo's agents are all there
+        self.assertTrue(os.path.islink(root_agents))  # and the user's link stays
+
     def test_session_start_offers(self):
         self.assertIn("hat.py migrate", self.hook("context", self.ws).stdout)  # an old layer, not registered
         self.migrate()
