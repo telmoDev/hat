@@ -25,7 +25,7 @@ while [ $# -gt 0 ]; do
 done
 
 fail() { echo "push-pr: $*" >&2; exit 1; }
-rgit() { if [ -n "${GIT_WRAPPER:-}" ]; then bash "$root/$GIT_WRAPPER" "$repo" "$@"; else git -C "$root/$repo" "$@"; fi; }
+rgit() { if [ -n "${GIT_WRAPPER:-}" ]; then bash "$(git_wrapper)" "$repo" "$@"; else git -C "$root/$repo" "$@"; fi; }
 case " $REPOS " in *" $repo "*) ;; *) fail "repo must be one of: $REPOS" ;; esac
 for kv in ${BASE_BRANCHES:-}; do [ "${kv%%=*}" = "$repo" ] && [ "${kv#*=}" = "$branch" ] && fail "refusing to push the base branch $branch"; done
 target=$base
