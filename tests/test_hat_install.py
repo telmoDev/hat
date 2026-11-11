@@ -31,7 +31,7 @@ def snapshot(root):
     return out
 
 
-class Install(unittest.TestCase):
+class Base(unittest.TestCase):
     def setUp(self):
         self.home = os.path.realpath(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, self.home, True)
@@ -62,6 +62,8 @@ class Install(unittest.TestCase):
         with open(os.path.join(self.claude, "agents", "reviewer.md"), "w") as f:
             f.write("my agent\n")
 
+
+class Install(Base):
     def test_install_wires_every_hook_once_through_the_hat_entry(self):
         code, out = self.run_install("install")
         self.assertEqual(code, 0, out)
@@ -103,7 +105,7 @@ class Install(unittest.TestCase):
         with open(os.path.join(self.claude, "CLAUDE.md"), encoding="utf-8") as f:
             self.assertTrue(f.read().startswith("# My own notes\n"))
         backups = os.listdir(os.path.join(self.home, ".hat", "backup"))
-        self.assertTrue(any(b.startswith("settings.json") for b in backups))
+        self.assertTrue(any("settings.json" in b for b in backups))
 
     def test_a_second_install_changes_nothing(self):
         self.user_setup()
@@ -151,7 +153,7 @@ class Install(unittest.TestCase):
         os.symlink(os.path.join(REPO, "guide", "skills", "pre-pr-review"), old)
         m = os.path.join(self.home, ".hat", "install.json")
         data = json.load(open(m))
-        data["links"].append(old)
+        data["installs"][os.path.realpath(self.claude).replace("\\", "/")]["links"].append(old)
         json.dump(data, open(m, "w"))
         self.run_install("install")
         self.assertFalse(os.path.lexists(old))
@@ -177,6 +179,61 @@ class Install(unittest.TestCase):
                            capture_output=True, encoding="utf-8", env=self.env, timeout=60)
         self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
         self.assertTrue(any(HOOK in c for c in self.commands("SessionStart")))
+
+
+class ConfigDirs(Base):
+    """Several Claude Code accounts on one machine (CLAUDE_CONFIG_DIR): one hat, one ~/.hat, wired into each."""
+
+    def run_in(self, config_dir, *args):
+        env = dict(self.env, CLAUDE_CONFIG_DIR=config_dir) if config_dir else self.env
+        p = subprocess.run([sys.executable, INSTALL] + list(args), capture_output=True, encoding="utf-8", env=env,
+                           timeout=60)
+        return p.returncode, p.stdout + p.stderr
+
+    def setUp(self):
+        super().setUp()
+        self.work = os.path.join(self.home, ".claude-work")
+
+    def test_claude_config_dir_is_where_it_installs(self):
+        code, out = self.run_in(self.work, "install")
+        self.assertEqual(code, 0, out)
+        with open(os.path.join(self.work, "settings.json"), encoding="utf-8") as f:
+            self.assertIn(HOOK, f.read())
+        self.assertTrue(os.path.isfile(os.path.join(self.work, "agents", "hat-dev.md")))
+        self.assertTrue(os.path.isfile(os.path.join(self.work, "skills", "sync-memory", "SKILL.md")))
+        self.assertFalse(os.path.exists(self.claude))  # the other account's folder is untouched
+
+    def test_uninstalling_one_account_leaves_the_other_whole(self):
+        self.run_in(None, "install")
+        self.run_in(self.work, "install")
+        code, out = self.run_in(self.work, "uninstall")
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self.run_in(None, "check")[0], 0)  # still complete, shared Codex links included
+        self.assertTrue(os.path.lexists(os.path.join(self.home, ".agents", "skills", "sync-memory")))
+        self.assertNotIn(HOOK, open(os.path.join(self.work, "settings.json"), encoding="utf-8").read())
+        self.run_in(None, "uninstall")
+        self.assertFalse(os.path.lexists(os.path.join(self.home, ".agents", "skills", "sync-memory")))
+
+    def test_an_install_from_before_is_read_as_the_default_accounts(self):
+        self.run_in(None, "install")
+        m = os.path.join(self.home, ".hat", "install.json")
+        data = json.load(open(m))
+        flat = data["installs"][os.path.realpath(self.claude).replace("\\", "/")]
+        json.dump(flat, open(m, "w"))  # the shape v0.9.0 wrote
+        code, out = self.run_in(None, "uninstall")
+        self.assertEqual(code, 0, out)
+        self.assertNotIn(HOOK, open(os.path.join(self.claude, "settings.json"), encoding="utf-8").read())
+
+    def test_doctor_checks_every_account(self):
+        self.run_in(None, "install")
+        self.run_in(self.work, "install")
+        p = subprocess.run([sys.executable, os.path.join(REPO, "scripts", "hat.py"), "doctor"], capture_output=True,
+                           encoding="utf-8", env=self.env, timeout=60)
+        self.assertIn("global install (%s)" % os.path.realpath(self.work).replace("\\", "/"), p.stdout)
+        os.remove(os.path.join(self.work, "agents", "hat-dev.md"))
+        p = subprocess.run([sys.executable, os.path.join(REPO, "scripts", "hat.py"), "doctor"], capture_output=True,
+                           encoding="utf-8", env=self.env, timeout=60)
+        self.assertIn("problem global install (%s)" % os.path.realpath(self.work).replace("\\", "/"), p.stdout)
 
 
 if __name__ == "__main__":

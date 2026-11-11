@@ -3,7 +3,8 @@
   python3 scripts/hat_install.py install     (bash install.sh --global)
   python3 scripts/hat_install.py uninstall   (bash install.sh --global --uninstall)
   python3 scripts/hat_install.py check       (bash install.sh --global --check)
-install adds to ~/.claude/settings.json the hooks that call scripts/hat-hook.sh (they act only in registered
+install adds to ~/.claude/settings.json (or $CLAUDE_CONFIG_DIR's, for another account: each account gets its own
+wiring, all of them one hat and one ~/.hat) the hooks that call scripts/hat-hook.sh (they act only in registered
 projects), a short pointer block to ~/.claude/CLAUDE.md (and ~/.codex/AGENTS.md when Codex is set up), the agents
 guide/agents/hat-*.md to ~/.claude/agents/, and links from ~/.claude/skills/ and ~/.agents/skills/ to guide/skills/.
 Everything it adds is recorded in ~/.hat/install.json, and uninstall removes exactly that. It keeps every other
@@ -49,6 +50,12 @@ HOOKS = [
 
 def home(*parts):
     return os.path.join(os.path.expanduser("~"), *parts)
+
+
+def claude_dir():
+    """The Claude Code config folder to wire: CLAUDE_CONFIG_DIR (an alias like claude-work for another account),
+    else ~/.claude. Every account's hooks call the same clone and share hat's home: one hat for all of them."""
+    return os.path.realpath(os.environ.get("CLAUDE_CONFIG_DIR") or home(".claude")).replace("\\", "/")
 
 
 def hat_home(*parts):
@@ -112,24 +119,46 @@ def agents():
     return sorted(n for n in os.listdir(base) if n.endswith(".md"))
 
 
-def manifest():
+def load_all():
+    """{config dir: what was installed there}. A v0.9.0 manifest (one install, ~/.claude) reads as the default's."""
     text = read(hat_home("install.json"))
-    return json.loads(text) if text else {"agents": [], "links": [], "blocks": [], "hooks": []}
+    data = json.loads(text) if text else {}
+    if "installs" not in data:
+        data = {"installs": {os.path.realpath(home(".claude")).replace("\\", "/"): data} if data else {}}
+    return data
 
 
-def targets():
-    """Every file or link install would own: (kind, path, source)."""
-    out = [("agent", home(".claude", "agents", n), os.path.join(CLONE, "guide", "agents", n)) for n in agents()]
+def manifest(data, cdir):
+    return data["installs"].setdefault(cdir, {"agents": [], "links": [], "blocks": [], "hooks": []})
+
+
+def save_all(data):
+    data["installs"] = {k: v for k, v in data["installs"].items() if any(v.get(x) for x in ("agents", "links", "hooks"))}
+    if data["installs"]:
+        write(hat_home("install.json"), json.dumps(data, indent=2) + "\n")
+    elif os.path.exists(hat_home("install.json")):
+        os.remove(hat_home("install.json"))
+
+
+def installed_dirs():
+    return sorted(load_all()["installs"])
+
+
+def targets(cdir):
+    """Every file or link install would own for that config folder: (kind, path, source). The Codex skill links
+    (~/.agents/skills) are shared by every account."""
+    out = [("agent", os.path.join(cdir, "agents", n), os.path.join(CLONE, "guide", "agents", n)) for n in agents()]
     for name in skills():
         src = os.path.join(CLONE, "guide", "skills", name)
-        out += [("link", home(".claude", "skills", name), src), ("link", home(".agents", "skills", name), src)]
+        out += [("link", os.path.join(cdir, "skills", name), src), ("link", home(".agents", "skills", name), src)]
     return out
 
 
-def conflicts(m):
+def conflicts(data, cdir):
+    ours = {p for e in data["installs"].values() for p in e.get("agents", []) + e.get("links", [])}
     bad = []
-    for kind, path, src in targets():
-        if not os.path.lexists(path) or path in m["agents"] + m["links"]:
+    for kind, path, src in targets(cdir):
+        if not os.path.lexists(path) or path in ours:
             continue
         if kind == "agent" and read(path) == read(src):
             continue
@@ -159,13 +188,14 @@ def remove_block(path):
 
 
 def install():
-    m = manifest()
-    bad = conflicts(m)
+    data, cdir = load_all(), claude_dir()
+    m = manifest(data, cdir)
+    bad = conflicts(data, cdir)
     if bad:
         print("hat install: refused, nothing changed: these exist and aren't hat's; move them away first:\n  "
               + "\n  ".join(bad))
         return 1
-    settings_path = home(".claude", "settings.json")
+    settings_path = os.path.join(cdir, "settings.json")
     text = read(settings_path)
     settings = json.loads(text) if text and text.strip() else {}
     hooks = settings.setdefault("hooks", {})
@@ -181,20 +211,20 @@ def install():
     if added:
         if text is not None and not m.get("backup"):
             stamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-            m["backup"] = hat_home("backup", "settings.json." + stamp)
+            m["backup"] = hat_home("backup", "%s-settings.json.%s" % (os.path.basename(cdir).lstrip("."), stamp))
             os.makedirs(os.path.dirname(m["backup"]), exist_ok=True)
             shutil.copy2(settings_path, m["backup"])
         write(settings_path, json.dumps(settings, indent=2) + "\n")
         m["hooks"] += added
-    for path in [home(".claude", "CLAUDE.md")] + ([home(".codex", "AGENTS.md")] if os.path.isdir(home(".codex")) else []):
+    for path in [os.path.join(cdir, "CLAUDE.md")] + ([home(".codex", "AGENTS.md")] if os.path.isdir(home(".codex")) else []):
         if add_block(path) and path not in m["blocks"]:
             m["blocks"].append(path)
-    wanted = {path for _, path, _ in targets()}
+    wanted = {path for _, path, _ in targets(cdir)}
     for path in [p for p in m["links"] if p not in wanted]:  # linked by an older install
         if is_link(path):
             unlink(path)
         m["links"].remove(path)
-    for kind, path, src in targets():
+    for kind, path, src in targets(cdir):
         if kind == "agent":
             if read(path) != read(src):
                 write(path, read(src))
@@ -205,19 +235,22 @@ def install():
                 link(src, path)
             if path not in m["links"]:
                 m["links"].append(path)
-    write(hat_home("install.json"), json.dumps(m, indent=2) + "\n")
-    print("hat installed for every project (%d hooks added, %d agents, %d skills linked)."
-          % (len(added), len(agents()), len(skills())))
+    save_all(data)
+    print("hat installed for every project in %s (%d hooks added, %d agents, %d skills linked)."
+          % (cdir, len(added), len(agents()), len(skills())))
     if "autoCompactWindow" not in settings:
-        print("Proposed, not set: \"autoCompactWindow\": 150000 in ~/.claude/settings.json, and the env "
+        print("Proposed, not set: \"autoCompactWindow\": 150000 in %s/settings.json, and the env "
+              % cdir + 
               "CLAUDE_CODE_IDLE_COMPACT_MIN_TOKENS=100000, to compact before the context grows costly.")
     print("Register a project: python3 %s/scripts/hat.py project add  (from its root)" % CLONE.replace("\\", "/"))
     return 0
 
 
 def uninstall():
-    m = manifest()
-    settings_path = home(".claude", "settings.json")
+    data, cdir = load_all(), claude_dir()
+    m = data["installs"].pop(cdir, {"agents": [], "links": [], "blocks": [], "hooks": []})
+    shared = {p for e in data["installs"].values() for p in e.get("links", []) + e.get("blocks", [])}
+    settings_path = os.path.join(cdir, "settings.json")
     text = read(settings_path)
     if text and m["hooks"]:
         settings = json.loads(text)
@@ -237,31 +270,32 @@ def uninstall():
             settings.pop("hooks", None)
         write(settings_path, json.dumps(settings, indent=2) + "\n")
     for path in m["blocks"]:
-        remove_block(path)
+        if path not in shared:  # ~/.codex/AGENTS.md stays while another account uses hat
+            remove_block(path)
     for path in m["agents"]:
         if os.path.isfile(path):
             os.remove(path)
     for path in m["links"]:
-        if is_link(path):
+        if path not in shared and is_link(path):
             unlink(path)
-    if os.path.exists(hat_home("install.json")):
-        os.remove(hat_home("install.json"))
-    print("hat uninstalled: its hooks, pointer, agents and skill links are gone; projects' state stays in %s."
-          % hat_home())
+    save_all(data)
+    print("hat uninstalled from %s: its hooks, pointer, agents and skill links are gone; projects' state stays in %s."
+          % (cdir, hat_home()))
     return 0
 
 
-def missing():
-    """What the global install lacks on this machine (empty when it is complete)."""
+def missing(cdir=None):
+    """What the global install lacks in that config folder (the current one by default); empty when complete."""
+    cdir = cdir or claude_dir()
     out, cmds = [], set()
-    text = read(home(".claude", "settings.json"))
+    text = read(os.path.join(cdir, "settings.json"))
     if text:
         cmds = {h.get("command") for gs in json.loads(text).get("hooks", {}).values() for g in gs
                 for h in g.get("hooks", [])}
     out += ["hook %s %s" % (e, command(h, a)) for e, _, h, a, _ in HOOKS if command(h, a) not in cmds]
-    if BEGIN not in (read(home(".claude", "CLAUDE.md")) or ""):
-        out.append("pointer in ~/.claude/CLAUDE.md")
-    out += [path for _, path, _ in targets() if not os.path.exists(path)]
+    if BEGIN not in (read(os.path.join(cdir, "CLAUDE.md")) or ""):
+        out.append("pointer in %s/CLAUDE.md" % cdir)
+    out += [path for _, path, _ in targets(cdir) if not os.path.exists(path)]
     return out
 
 
@@ -269,7 +303,7 @@ def check():
     missing_ = missing()
     for line in missing_:
         print("missing " + line)
-    print("hat global install: " + ("ok" if not missing_ else "incomplete (bash install.sh --global)"))
+    print("hat global install (%s): " % claude_dir() + ("ok" if not missing_ else "incomplete (bash install.sh --global)"))
     return 1 if missing_ else 0
 
 
