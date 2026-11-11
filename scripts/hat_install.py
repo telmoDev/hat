@@ -92,7 +92,9 @@ def is_link(path):
 def link(src, dst):
     os.makedirs(os.path.dirname(dst), exist_ok=True)
     if WINDOWS:  # a directory junction needs no admin rights or developer mode
-        subprocess.run(["cmd", "/c", "mklink", "/J", dst, src], check=True, capture_output=True)
+        # mklink takes Windows paths only: the config folder is kept with forward slashes
+        subprocess.run(["cmd", "/c", "mklink", "/J", os.path.normpath(dst), os.path.normpath(src)], check=True,
+                       capture_output=True)
     else:
         os.symlink(src, dst)
 
