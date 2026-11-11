@@ -148,6 +148,16 @@ git -C "$api" checkout -q main; git -C "$api" checkout -qb feat/x
 commit "test: x"; commit "feat: x"$'\n\nCo-authored-by: Ana <ana@example.com>'
 run "pre-pr-pass stamps a tested branch" bash .orchestrator/scripts/pre-pr-pass.sh api feat/x
 
+# A stacked branch that merged its base back in: walked as one line by date, the stacks' commits interleave, and the
+# base's "feat: c" lands after the top's "test: b"/"fix: b" pair although its own test comes right before it.
+at() { GIT_COMMITTER_DATE="2026-01-01T00:00:0$1" GIT_AUTHOR_DATE="2026-01-01T00:00:0$1" commit "$2"; }
+git -C "$api" checkout -q main; git -C "$api" checkout -qb feat/base; at 1 "test: a"; at 2 "feat: a"
+git -C "$api" checkout -qb feat/top; at 5 "test: b"; at 6 "fix: b"
+git -C "$api" checkout -q feat/base; at 4 "test: c"; at 7 "feat: c"
+git -C "$api" checkout -q feat/top; git -C "$api" merge -q --no-edit -X ours feat/base >/dev/null
+run "pre-pr-pass stamps a stacked branch that merged its base" bash .orchestrator/scripts/pre-pr-pass.sh api feat/top
+git -C "$api" checkout -q feat/x
+
 sed -i.bak 's/^ATTRIBUTION=""/ATTRIBUTION="refuse"/' .orchestrator/orchestrator.conf
 printf 'Why: smoke.\n\nCo-authored-by: Ana <ana@example.com>\n' >"$tmp/body.md"
 printf 'Why: smoke.\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n' >"$tmp/body-ai.md"
