@@ -11,6 +11,8 @@ into the new version's section.
 
 ## Unreleased
 
+## v0.9.2 — 2026-11-11
+
 - `pre-pr-pass.sh` checks test-first per line of history: from each code commit it walks back through first
   parents, merges skipped, to a test commit. It walked the range as one line by date, so a stacked branch that
   merged its base back in interleaved the two branches' commits and a correctly tested `feat` was refused.
