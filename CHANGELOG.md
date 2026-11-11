@@ -11,6 +11,12 @@ into the new version's section.
 
 ## Unreleased
 
+- `hat migrate --refresh`, for a workspace still in use between its migration and its cleanup: brings its new
+  memory, task files, telemetry, handoff and layer copy into hat's state, keeps the reviewed `rules.md` and
+  `config`, appends any project paragraph new since the migration to `rules.md`, and reports conf keys that now
+  differ. A `GIT_WRAPPER` inside the old layer moves to `<state>/bin/` at the migration, and the config points at
+  it; the scripts take an absolute `GIT_WRAPPER` as it is.
+
 ## v0.9.1 — 2026-11-10
 
 - One hat for several Claude Code accounts: the global install honours `CLAUDE_CONFIG_DIR`

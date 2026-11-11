@@ -2,6 +2,8 @@
 """hat migrate (G6a, docs/meta-harness/global-install.md §8): move a workspace with the per-project layer to the
 global install, saving everything that is the project's own first.
   python3 scripts/hat.py migrate <workspace> [--dry-run]
+  python3 scripts/hat.py migrate <workspace> --refresh    after a migration, if the workspace kept working: bring
+                                                        its new state over, keeping the review of rules.md and config
   python3 scripts/hat.py migrate <workspace> --cleanup    after a migration: remove hat's old layer, one commit
 Each layer file is compared with the template of the workspace's TEMPLATE_VERSION (read from this clone's tag),
 placeholders filled at setup counting as wildcards. What equals the template is hat's. What differs is the
@@ -167,6 +169,105 @@ def plan(ws, version):
     return "\n".join(rules) + "\n", overrides, checklist, must
 
 
+def move_wrapper(ws, config, stage, st):
+    """A GIT_WRAPPER inside the old layer would go with the cleanup: copy it to <state>/bin/ and point the config
+    at it (an absolute path, which the scripts use as it is)."""
+    text = read(config)
+    m = re.search(r'^GIT_WRAPPER="?([^"\n]+)"?\s*$', text, re.M)
+    if not m or os.path.isabs(m.group(1)) or not m.group(1).startswith(".orchestrator/"):
+        return
+    src = os.path.join(ws, *m.group(1).split("/"))
+    if not os.path.isfile(src):
+        return
+    os.makedirs(os.path.join(stage, "bin"), exist_ok=True)
+    shutil.copy2(src, os.path.join(stage, "bin", os.path.basename(src)))
+    final = hat.norm(os.path.join(st, "bin", os.path.basename(src)))
+    with open(config, "w", encoding="utf-8", newline="") as f:
+        f.write(text[:m.start()] + 'GIT_WRAPPER="%s"' % final + text[m.end():])
+
+
+def copy_state(ws, dst):
+    """memory/, odd/tasks/, the telemetry store (a SQLite backup) and the handoff state of the workspace, into dst."""
+    for sub, src in (("memory", os.path.join(ws, "memory")), ("tasks", os.path.join(ws, "odd", "tasks"))):
+        shutil.rmtree(os.path.join(dst, sub), ignore_errors=True)
+        os.makedirs(os.path.join(dst, sub))
+        for n in sorted(os.listdir(src)) if os.path.isdir(src) else []:
+            if n.endswith(".md"):
+                shutil.copy2(os.path.join(src, n), os.path.join(dst, sub, n))
+    db = os.path.join(ws, ".orchestrator", "telemetry", "telemetry.db")
+    if os.path.isfile(db):
+        src_db = sqlite3.connect("file:%s?mode=ro" % db.replace("\\", "/"), uri=True)
+        dst_db = sqlite3.connect(os.path.join(dst, "telemetry.db"))
+        src_db.backup(dst_db)
+        src_db.close()
+        dst_db.close()
+    handoff = os.path.join(ws, ".orchestrator", "tmp", "handoff")
+    if os.path.isdir(handoff):
+        shutil.rmtree(os.path.join(dst, "handoff"), ignore_errors=True)
+        shutil.copytree(handoff, os.path.join(dst, "handoff"))
+
+
+def copy_layer(ws, dst):
+    shutil.rmtree(dst, ignore_errors=True)
+    for top in LAYER:
+        p = os.path.join(ws, top)
+        target = os.path.join(dst, top)
+        if os.path.isfile(p):
+            os.makedirs(os.path.dirname(target), exist_ok=True)
+            shutil.copy2(p, target)
+        elif os.path.isdir(p):
+            shutil.copytree(p, target, ignore=shutil.ignore_patterns("telemetry.db*"))
+
+
+def refresh(ws):
+    """Bring a migrated workspace's new state into hat's copy before its cleanup. The state's rules.md and config
+    are the user's review: kept; a project paragraph new since the migration is appended to rules.md, and a conf
+    key that now differs from the state's config is reported, not copied."""
+    ws = hat.norm(ws)
+    hit = hat.resolve(ws)
+    info = os.path.join(hat.state(hit[0]), "migrated.json") if hit and hit[1] == ws else None
+    if not info or not os.path.isfile(info):
+        return fail("%s is not migrated: run hat migrate %s first" % (ws, ws))
+    if os.path.isdir(os.path.join(ws, ".git")):
+        dirty = subprocess.run(["git", "-C", ws, "status", "--porcelain", "--"]
+                               + [p for p in LAYER if os.path.exists(os.path.join(ws, p))],
+                               capture_output=True, encoding="utf-8").stdout.strip()
+        if dirty:
+            return fail("uncommitted changes in the orchestration layer: commit them first\n" + dirty)
+    st = hat.state(hit[0])
+    with open(info, encoding="utf-8") as f:
+        data = json.load(f)
+    rules_path = os.path.join(st, "rules.md")
+    rules, overrides, _, must = plan(ws, data["template_version"])
+    kept = read(rules_path) if os.path.isfile(rules_path) else ""
+    new = [p.strip() for p in must if p.strip() not in kept]
+    if new:
+        kept = kept.rstrip("\n") + ("\n\n## Added since the migration\n" if "## Added since the migration" not in kept
+                                    else "\n") + "\n" + "\n\n".join(new) + "\n"
+        with open(rules_path, "w", encoding="utf-8", newline="\n") as f:
+            f.write(kept)
+    copy_state(ws, st)
+    shutil.rmtree(os.path.join(st, "overrides"), ignore_errors=True)
+    for rel, text in overrides.items():
+        p = os.path.join(st, "overrides", *rel.split("/"))
+        os.makedirs(os.path.dirname(p), exist_ok=True)
+        with open(p, "w", encoding="utf-8", newline="") as f:
+            f.write(text)
+    copy_layer(ws, os.path.join(st, "migrated-layer"))
+    ws_conf = dict(re.findall(r'^([A-Z_]+)="?([^"\n]*)"?\s*$', read(os.path.join(ws, ".orchestrator", "orchestrator.conf")), re.M))
+    st_conf = dict(re.findall(r'^([A-Z_]+)="?([^"\n]*)"?\s*$', read(os.path.join(st, "config")), re.M))
+    differ = sorted(k for k, v in ws_conf.items() if k not in ("GIT_WRAPPER",) and st_conf.get(k) != v)
+    data["refreshed_at"] = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    with open(info, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
+    note = hat.record("%s: refreshed from %s" % (hit[0], ws), "projects/" + hit[0])
+    print("hat migrate --refresh: memory, tasks, telemetry, handoff and the layer copy brought over from %s; "
+          "rules.md and config kept (%d new project paragraph(s) appended to rules.md); %s." % (ws, len(new), note))
+    if differ:
+        print("Conf keys that differ from the state's config (kept as they are in the state): " + ", ".join(differ))
+    return 0
+
+
 def migrate(ws, dry):
     ws = hat.norm(ws)
     conf_path = os.path.join(ws, ".orchestrator", "orchestrator.conf")
@@ -220,10 +321,8 @@ def migrate(ws, dry):
     try:
         os.makedirs(stage)
         shutil.copy2(conf_path, os.path.join(stage, "config"))
-        for sub, names, src in (("memory", memory, os.path.join(ws, "memory")), ("tasks", tasks, tasks_dir)):
-            os.makedirs(os.path.join(stage, sub))
-            for n in names:
-                shutil.copy2(os.path.join(src, n), os.path.join(stage, sub, n))
+        move_wrapper(ws, os.path.join(stage, "config"), stage, st)
+        copy_state(ws, stage)
         with open(os.path.join(stage, "rules.md"), "w", encoding="utf-8", newline="\n") as f:
             f.write(rules)
         if checklist:
@@ -234,23 +333,7 @@ def migrate(ws, dry):
             os.makedirs(os.path.dirname(p), exist_ok=True)
             with open(p, "w", encoding="utf-8", newline="") as f:
                 f.write(text)
-        if os.path.isfile(db):
-            src, dst = sqlite3.connect("file:%s?mode=ro" % db.replace("\\", "/"), uri=True), \
-                sqlite3.connect(os.path.join(stage, "telemetry.db"))
-            src.backup(dst)
-            src.close()
-            dst.close()
-        handoff = os.path.join(ws, ".orchestrator", "tmp", "handoff")
-        if os.path.isdir(handoff):
-            shutil.copytree(handoff, os.path.join(stage, "handoff"))
-        for top in LAYER:
-            p = os.path.join(ws, top)
-            dst = os.path.join(stage, "migrated-layer", top)
-            if os.path.isfile(p):
-                os.makedirs(os.path.dirname(dst), exist_ok=True)
-                shutil.copy2(p, dst)
-            elif os.path.isdir(p):
-                shutil.copytree(p, dst, ignore=shutil.ignore_patterns("telemetry.db*"))
+        copy_layer(ws, os.path.join(stage, "migrated-layer"))
         for p in must:  # the check, on what was written
             if p.strip() not in read(os.path.join(stage, "rules.md")):
                 raise RuntimeError("a project paragraph is missing from rules.md: " + p.strip()[:80])
@@ -384,10 +467,12 @@ def cleanup(ws):
 
 
 def main(args):
-    rest = [a for a in args if a not in ("--dry-run", "--cleanup")]
+    rest = [a for a in args if a not in ("--dry-run", "--cleanup", "--refresh")]
     if len(rest) != 1:
         print(__doc__.strip(), file=sys.stderr)
         return 2
+    if "--refresh" in args:
+        return refresh(os.path.abspath(rest[0]))
     if "--cleanup" in args:
         return cleanup(os.path.abspath(rest[0]))
     return migrate(os.path.abspath(rest[0]), "--dry-run" in args)
