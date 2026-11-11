@@ -37,7 +37,7 @@ class Base(unittest.TestCase):
         self.tmp = os.path.realpath(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, self.tmp, True)
         self.transcript = os.path.join(self.tmp, "t.jsonl")
-        with open(self.transcript, "w") as f:
+        with open(self.transcript, "w", encoding="utf-8") as f:
             f.write(json.dumps({"type": "user", "message": {"content": "hi"}}) + "\n")
             f.write(assistant("r1", 100, 1000, 50) + "\n")
             f.write(assistant("r2", 20, 90000, 3000) + "\n")
@@ -87,9 +87,9 @@ class Handoff(Base):
         self.state = os.path.join(self.tmp, "state")
         os.makedirs(os.path.join(self.state, "tasks"))
         os.makedirs(os.path.join(self.state, "memory"))
-        with open(os.path.join(self.state, "tasks", "cart.md"), "w") as f:
+        with open(os.path.join(self.state, "tasks", "cart.md"), "w", encoding="utf-8") as f:
             f.write("# cart\n\nStatus: active · Next: T2 the totals\n")
-        with open(os.path.join(self.state, "config"), "w") as f:
+        with open(os.path.join(self.state, "config"), "w", encoding="utf-8") as f:
             f.write('REPOS="."\n')
         env = {"HAT_STATE": self.state, "HAT_ROOT": self.root, "HAT_PROJECT": "shop-abc123"}
         patcher = mock.patch.dict(os.environ, env)
@@ -106,7 +106,7 @@ class Handoff(Base):
 
     def test_saved_even_when_the_memory_is_synced(self):
         session_handoff.start(self.root, {"session_id": "s1", "source": "startup"})
-        with open(os.path.join(self.state, "memory", "NEXT_STEPS.md"), "w") as f:
+        with open(os.path.join(self.state, "memory", "NEXT_STEPS.md"), "w", encoding="utf-8") as f:
             f.write("# synced\n")
         session_handoff.compact(self.root, self.pre_compact())
         self.assertIn("cart", session_handoff.start(self.root, {"session_id": "s1", "source": "compact"}) or "")
