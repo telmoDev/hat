@@ -4,6 +4,7 @@ solutions in benchmark/solutions/ and by recorded telemetry events.
   python3 -m unittest discover -s tests
 Needs git and bash; the web checks need Node 18+ and are skipped without it.
 """
+import hermetic  # noqa: F401  (first: never the real hat home)
 import json
 import os
 import shutil

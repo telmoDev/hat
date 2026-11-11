@@ -3,6 +3,7 @@
 Fixtures follow the shapes of the OKF v0.2 spec (GoogleCloudPlatform/knowledge-catalog, okf/SPEC.md), written
 here, not copied. No network, no model.
 """
+import hermetic  # noqa: F401  (first: never the real hat home)
 import hashlib
 import os
 import shutil

@@ -1,6 +1,7 @@
 """Tests for G5 (roadmap X4): what differs per project is configuration, so no project has to fork a layer file.
   python3 -m unittest tests.test_configure
 """
+import hermetic  # noqa: F401  (first: never the real hat home)
 import os
 import re
 import unittest

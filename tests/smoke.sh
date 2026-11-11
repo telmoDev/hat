@@ -7,6 +7,9 @@
 set -euo pipefail
 here="$(cd "$(dirname "$0")/.." && pwd)"
 tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
+# Never the real hat home: on a machine where this clone is a registered hat project, scripts run from the
+# clone would otherwise find it.
+export HAT_HOME="$tmp/hat-home"; unset HAT_STATE HAT_ROOT HAT_PROJECT
 py=""; for c in python3 python "py -3"; do $c -c 'import sys; sys.exit(sys.version_info < (3, 8))' >/dev/null 2>&1 && { py=$c; break; }; done
 [ -n "$py" ] || { echo "smoke: Python 3.8+ not found" >&2; exit 2; }
 

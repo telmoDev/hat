@@ -2,6 +2,7 @@
 The Markdown stays the source of truth: the store keeps a projection, never writes back.
   python3 -m unittest discover -s tests
 """
+import hermetic  # noqa: F401  (first: never the real hat home)
 import json
 import os
 import shutil

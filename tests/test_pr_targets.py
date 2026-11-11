@@ -3,6 +3,7 @@ project's repos need) and PR_TARGETS (the branch a repo's PRs open into, when it
 A real workspace carried both in its own push-pr.sh and memory-state.sh; now they are configuration.
   python3 -m unittest tests.test_pr_targets
 """
+import hermetic  # noqa: F401  (first: never the real hat home)
 import os
 import shutil
 import subprocess

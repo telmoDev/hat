@@ -2,6 +2,7 @@
 folder: nothing touches the real ~/.claude, ~/.codex, ~/.agents or ~/.hat.
   python3 -m unittest tests.test_hat_install
 """
+import hermetic  # noqa: F401  (first: never the real hat home)
 import hashlib
 import json
 import os

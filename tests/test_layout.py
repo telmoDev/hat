@@ -2,6 +2,7 @@
 straight from the clone as the global install runs them, and never write inside the project.
   python3 -m unittest tests.test_layout
 """
+import hermetic  # noqa: F401  (first: never the real hat home)
 import hashlib
 import json
 import os

@@ -3,6 +3,7 @@ parser. Payload shapes follow the hooks reference (code.claude.com/docs/en/hooks
 observed; transcript lines keep only the keys the parser reads, with the shape real transcripts have.
   python3 -m unittest discover -s tests
 """
+import hermetic  # noqa: F401  (first: never the real hat home)
 import json
 import os
 import shutil

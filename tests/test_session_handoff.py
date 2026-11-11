@@ -2,6 +2,7 @@
   python3 -m unittest tests.test_session_handoff
 Needs git and bash (Git Bash on Windows), like tests/smoke.sh. No network, no model.
 """
+import hermetic  # noqa: F401  (first: never the real hat home)
 import json
 import os
 import re

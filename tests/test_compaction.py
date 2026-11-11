@@ -4,6 +4,7 @@ Payload shapes checked live on Claude Code 2.1.311 (2026-11-10): PreCompact carr
 session_id, cwd, transcript_path, prompt_id; the next SessionStart has source "compact" and the same session_id.
   python3 -m unittest tests.test_compaction
 """
+import hermetic  # noqa: F401  (first: never the real hat home)
 import json
 import os
 import shutil

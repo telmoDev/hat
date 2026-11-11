@@ -1,6 +1,7 @@
 """Unit tests for T7: the API-equivalent cost, always an estimate, never a subscription's spend.
   python3 -m unittest discover -s tests
 """
+import hermetic  # noqa: F401  (first: never the real hat home)
 import json
 import os
 import shutil
