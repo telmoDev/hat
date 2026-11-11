@@ -2,6 +2,7 @@
 Expected figures are worked out by hand from the fixture below.
   python3 -m unittest discover -s tests
 """
+import hermetic  # noqa: F401  (first: never the real hat home)
 import json
 import os
 import shutil

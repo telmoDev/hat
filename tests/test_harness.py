@@ -2,6 +2,7 @@
   python3 -m unittest tests.test_harness
 No runtime is launched: health checks run stub binaries that only answer --version.
 """
+import hermetic  # noqa: F401  (first: never the real hat home)
 import json
 import os
 import re

@@ -2,6 +2,7 @@
 HOME and HAT_HOME point at temporary folders.
   python3 -m unittest tests.test_hat_status
 """
+import hermetic  # noqa: F401  (first: never the real hat home)
 import hashlib
 import os
 import shutil

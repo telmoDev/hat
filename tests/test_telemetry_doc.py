@@ -1,6 +1,7 @@
 """docs/telemetry.md matches the contract in code, and each F1 criterion is traceable to its evidence.
   python3 -m unittest tests.test_telemetry_doc
 """
+import hermetic  # noqa: F401  (first: never the real hat home)
 import os
 import re
 import sys

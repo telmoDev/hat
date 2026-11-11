@@ -4,6 +4,7 @@ v0.7.0 workspace.
   python3 -m unittest discover -s tests
 Needs git and bash (Git Bash on Windows), like tests/smoke.sh.
 """
+import hermetic  # noqa: F401  (first: never the real hat home)
 import hashlib
 import io
 import json
@@ -324,11 +325,13 @@ class Partial(Workspace):
         self.assertIn('TEMPLATE_VERSION="%s"' % NEXT, self.read(".orchestrator/orchestrator.conf"))
 
     def test_an_unreleased_skill_updates_without_claiming_a_version(self):
-        code, out = self.update("--dev", skill=REPO)
+        # Not this clone: right after a release its HEAD is the tag, and it counts as released.
+        skill = self.dev_skill()
+        code, out = self.update("--dev", skill=skill)
         self.assertEqual(code, 0, out)
         self.assertIn('TEMPLATE_VERSION="0.7.0"', self.read(".orchestrator/orchestrator.conf"))
         self.assertIn("not a release", out)
-        code, out = self.update(skill=REPO)
+        code, out = self.update(skill=skill)
         self.assertNotEqual(code, 0)
         self.assertIn("--dev", out)
 

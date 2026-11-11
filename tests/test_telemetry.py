@@ -2,6 +2,7 @@
   python3 -m unittest discover -s tests
 Standard library only, like the scripts they test. tests/smoke.sh runs them on macOS, Linux and Windows.
 """
+import hermetic  # noqa: F401  (first: never the real hat home)
 import ast
 import json
 import os

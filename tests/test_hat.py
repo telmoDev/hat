@@ -2,6 +2,7 @@
   python3 -m unittest tests.test_hat
 HAT_HOME points every test at a temporary home; nothing touches ~/.hat.
 """
+import hermetic  # noqa: F401  (first: never the real hat home)
 import hashlib
 import os
 import shutil

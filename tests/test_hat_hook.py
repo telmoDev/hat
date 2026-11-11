@@ -2,6 +2,7 @@
 home as a local git repo (hat commit). HAT_HOME points every test at a temporary home.
   python3 -m unittest tests.test_hat_hook
 """
+import hermetic  # noqa: F401  (first: never the real hat home)
 import json
 import os
 import shutil

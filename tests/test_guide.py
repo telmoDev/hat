@@ -1,6 +1,7 @@
 """Tests for G4: the global guide, project rules template and agents built from templates/ (scripts/build_guide.py).
   python3 -m unittest tests.test_guide
 """
+import hermetic  # noqa: F401  (first: never the real hat home)
 import os
 import re
 import subprocess

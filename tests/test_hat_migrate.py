@@ -3,6 +3,7 @@ verbatim, verifies nothing project-specific is missing, and never touches the wo
 The workspace is scaffolded by the real v0.7.0 release and adapted the way a user adapts one.
   python3 -m unittest tests.test_hat_migrate
 """
+import hermetic  # noqa: F401  (first: never the real hat home)
 import hashlib
 import io
 import json

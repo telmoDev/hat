@@ -1,6 +1,7 @@
 """Unit tests for odd_tasks.py, the task-file parser memory-check.py and telemetry.py share.
   python3 -m unittest discover -s tests
 """
+import hermetic  # noqa: F401  (first: never the real hat home)
 import ast
 import os
 import sys
