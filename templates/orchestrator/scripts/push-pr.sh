@@ -5,8 +5,10 @@
 # not contain origin/<base>, and a HEAD the pre-PR gate has not stamped (pre-pr-pass.sh). And what orchestrator.conf
 # sets: a body without TICKET_LINE, a title not matching TITLE_PATTERN or over TITLE_MAX characters, and, with
 # ATTRIBUTION="refuse", AI attribution in the body or the commits.
-# Git runs through GIT_WRAPPER when orchestrator.conf sets one. If the branch already has an open PR, it only
-# pushes and prints that PR's URL. It never merges and never force-pushes.
+# Git runs through GIT_WRAPPER when orchestrator.conf sets one. The PR opens into <base>, or into the repo's
+# PR_TARGETS entry when it has one (the branch still has to contain origin/<base>), and that branch is never pushed.
+# With GH_USER set, gh runs with that account's token instead of the active one. If the branch already has an open
+# PR, it only pushes and prints that PR's URL. It never merges and never force-pushes.
 set -euo pipefail
 . "$(dirname "$0")/layout.sh"  # root, conf, mem, tasks, tmp, here: the workspace or hat's state
 . "$conf"
@@ -26,7 +28,13 @@ fail() { echo "push-pr: $*" >&2; exit 1; }
 rgit() { if [ -n "${GIT_WRAPPER:-}" ]; then bash "$root/$GIT_WRAPPER" "$repo" "$@"; else git -C "$root/$repo" "$@"; fi; }
 case " $REPOS " in *" $repo "*) ;; *) fail "repo must be one of: $REPOS" ;; esac
 for kv in ${BASE_BRANCHES:-}; do [ "${kv%%=*}" = "$repo" ] && [ "${kv#*=}" = "$branch" ] && fail "refusing to push the base branch $branch"; done
-case "$branch" in main|master) fail "refusing to push $branch" ;; esac
+target=$base
+for kv in ${PR_TARGETS:-}; do [ "${kv%%=*}" = "$repo" ] && target=${kv#*=}; done
+case "$branch" in main|master|"$target") fail "refusing to push $branch" ;; esac
+if [ -n "${GH_USER:-}" ]; then
+  GH_TOKEN=$(gh auth token --user "$GH_USER" 2>/dev/null) || fail "no gh token for GH_USER=$GH_USER (gh auth login)"
+  export GH_TOKEN
+fi
 [ -f "$body" ] || fail "body file not found: $body"
 [ -z "${TICKET_LINE:-}" ] || grep -Eq "$TICKET_LINE" "$body" || fail "body has no line matching $TICKET_LINE"
 refuse_ai=no; [ "${ATTRIBUTION:-}" = refuse ] && refuse_ai=yes
@@ -53,4 +61,4 @@ rgit push -u origin "$branch"
 cd "$root/$repo"
 existing=$(gh pr list --head "$branch" --state open --json url --jq '.[0].url // empty')
 if [ -n "$existing" ]; then echo "$existing"; exit 0; fi
-gh pr create --base "$base" --head "$branch" --title "$title" --body-file "$body" ${extra[@]+"${extra[@]}"}
+gh pr create --base "$target" --head "$branch" --title "$title" --body-file "$body" ${extra[@]+"${extra[@]}"}

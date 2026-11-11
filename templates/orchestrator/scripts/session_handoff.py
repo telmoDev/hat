@@ -36,7 +36,8 @@ SECRET = re.compile(
     r"|bearer\s+[A-Za-z0-9._~+/-]{16,}"
     r"|BEGIN [A-Z ]*PRIVATE KEY"
     r"|[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}"
-    r"|\b(?=(?:[A-Za-z+/_-]*\d){4})[A-Za-z0-9+/_-]{40,}\b)",  # long token with 4+ digits; branch names have none
+    # long token with 4+ digits; a lowercase slug (a branch name like support-january-2026-…) is not one
+    r"|(?<![A-Za-z0-9+/_-])(?!(?-i:[a-z0-9]+(?:[-_][a-z0-9]+)+)\b)(?=(?:[A-Za-z+/_-]*\d){4})[A-Za-z0-9+/_-]{40,}\b)",
     re.I,
 )
 _STATUS = re.compile(r"^Status:\s*(\w+)(?:.*?·\s*Next:\s*(.*))?$", re.M)

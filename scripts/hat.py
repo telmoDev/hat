@@ -219,6 +219,8 @@ def status():
         root = p["root"]
         if not os.path.isdir(root):
             layer = "root missing (hat project move %s <root>, or remove)" % pid
+        elif os.path.isdir(os.path.join(root, ".orchestrator")) and os.path.isfile(os.path.join(state(pid), "migrated.json")):
+            layer = "migrated; its old layer still runs until: hat migrate %s --cleanup" % root
         elif os.path.isdir(os.path.join(root, ".orchestrator")):
             layer = "own layer: hat leaves it alone until it is migrated"
         else:

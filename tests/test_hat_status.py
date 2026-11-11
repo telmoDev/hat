@@ -94,6 +94,14 @@ class Views(unittest.TestCase):
         self.assertIn("own layer", block(out, a))
         self.assertIn("root missing", block(out, b))
 
+    def test_status_says_when_a_migrated_workspace_awaits_its_cleanup(self):
+        a, ra, sa = self.project("legacy")
+        os.makedirs(os.path.join(ra, ".orchestrator"))
+        self.write(os.path.join(sa, "migrated.json"), "{}")
+        code, out = self.hat("status")
+        self.assertIn("migrated", block(out, a))
+        self.assertIn("--cleanup", block(out, a))
+
     def test_status_reads_only(self):
         a, ra, sa = self.project("shop")
         self.write(os.path.join(sa, "memory", "NEXT_STEPS.md"), "# Next\n")

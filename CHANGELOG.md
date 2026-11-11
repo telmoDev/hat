@@ -11,6 +11,15 @@ into the new version's section.
 
 ## Unreleased
 
+- Per-project git settings as configuration (roadmap X4), from migrating a real workspace that had forked its
+  scripts for them: `PR_TARGETS` (per repo, the branch PRs open into when it isn't the base they branch from;
+  `push-pr.sh` opens the PR there and never pushes it, `memory-state.sh` never lists it for cleanup) and
+  `GH_USER` (the gh account the project's repos need; `push-pr.sh` and `memory-state.sh` run gh with its token).
+  The secret check no longer takes a long lowercase branch slug with digits for a token. `hat status` says when a
+  migrated workspace is waiting for its cleanup.
+  **Workspaces:** `bash <skill>/scripts/update.sh <workspace-root>` adds the two keys; a workspace that forked
+  `push-pr.sh` or `memory-state.sh` for them can set the keys and take the template's scripts back.
+
 ## v0.9.0 — 2026-11-10
 
 - README and INSTALL describe hat as it is now: installed once for every project (`bash install.sh --global`),
