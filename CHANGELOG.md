@@ -11,6 +11,8 @@ into the new version's section.
 
 ## Unreleased
 
+## v0.9.1 — 2026-11-10
+
 - One hat for several Claude Code accounts: the global install honours `CLAUDE_CONFIG_DIR`
   (`CLAUDE_CONFIG_DIR=~/.claude-work bash install.sh --global` wires the account that alias uses). Every account's
   hooks call the same clone and share `~/.hat`, so projects, memory and telemetry are the same whichever account
