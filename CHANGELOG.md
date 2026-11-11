@@ -11,6 +11,11 @@ into the new version's section.
 
 ## Unreleased
 
+- `pre-pr-pass.sh` checks test-first per line of history: from each code commit it walks back through first
+  parents, merges skipped, to a test commit. It walked the range as one line by date, so a stacked branch that
+  merged its base back in interleaved the two branches' commits and a correctly tested `feat` was refused.
+  **Workspaces:** `bash <skill>/scripts/update.sh <workspace-root>` refreshes the script; a hat project needs nothing.
+
 - `hat migrate --cleanup` never removes a link, anything reached through one, or anything inside an app repo
   (`REPOS`), and lists what it left alone. A real workspace keeps its agents in an app repo and links the root's
   `.claude/agents` to them: the cleanup would have deleted the repo's agents through the link. The layer copy keeps
