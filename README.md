@@ -9,38 +9,52 @@ release works on its own.
 
 ## What it does today
 
-It sets up an **orchestration layer** at the root of a workspace (one or several git repos), for **Claude
-Code**, **Codex** or both, on **macOS, Linux and Windows**:
+hat is **installed once and works in every project you register**, for **Claude Code** (Codex: partly, see
+below), on **macOS, Linux and Windows**. Your repositories carry no hat file: each project's state lives in
+`~/.hat/projects/<id>/`.
 
-- **One guide for both tools** (`AGENTS.md`): an orchestrator session plans, delegates to agents, verifies and
-  reports; it doesn't write application code itself.
-- **Agents**: `explorer` (read-only lookups), `architect` (plans and reviews) and one developer agent per repo,
-  each run on the cheapest model tier that gets its task right.
-- **ODD flow**: *Organic* Driven Development sizes the process to the request (a question gets an answer, a
-  small change goes straight through, large work gets a task file in `odd/tasks/`), and *Outcome-Driven*
-  Development decides when it is done: criteria verified with evidence, test-first when `TDD` is on.
-- **Pre-PR gate**: a checklist and scripts that refuse to push what wasn't reviewed and stamped.
-- **Memory between sessions**: `memory/` loads at every start and `sync-memory` keeps it current. A session that
-  ends without syncing leaves an automatic handoff of where it stopped (next release).
-- **Local telemetry**: runs, agent runs, tokens (with their source), durations and ODD criteria in a SQLite file
-  per workspace, with reports and an API-equivalent cost estimate. No network, no model calls, never prompts or
-  code ([docs/telemetry.md](docs/telemetry.md); next release).
-- **Good-practice defaults that adapt**: design principles, test-first and a quality checklist that hold for any
-  stack; setup reads your repos' conventions and asks what to keep, and your corrections become workspace rules.
+- **One install, one update.** `bash install.sh --global` adds hat's hooks to `~/.claude/settings.json`, its
+  agents and two skills, and a short note to `~/.claude/CLAUDE.md`; it keeps every setting of yours and
+  `--uninstall` removes exactly what it added. Updating is a `git pull` of the clone.
+- **Projects, apart.** `hat.py project add` registers a project (a repo, or the folder that holds several).
+  Its memory, task files, config, own rules, telemetry and session handoff live in `~/.hat/projects/<id>/`,
+  a local git repo, so its history is kept. Outside a registered project hat adds nothing to a session.
+- **A session knows where it is.** At start, a short header names the project and points to hat's guide and the
+  project's rules, followed by its memory and its binding decisions.
+- **The ODD flow.** An orchestrator session plans, delegates to agents (`hat-explorer`, `hat-architect`,
+  `hat-dev`, each on the cheapest model tier that gets its task right), verifies and reports; it doesn't write
+  application code. *Organic* Driven Development sizes the process to the request; *Outcome-Driven*
+  Development decides when it is done: criteria verified with evidence, test-first when `TDD` is on. A pre-PR
+  gate refuses to push what wasn't reviewed and stamped.
+- **Nothing lost between sessions.** `sync-memory` keeps the memory current; a session that ends without it
+  leaves a handoff of where it stopped; a compaction saves where the session was and shows it right after.
+- **Local telemetry.** Runs, agent runs, tokens (with their source), durations, compactions and ODD criteria in
+  SQLite per project, with reports and an API-equivalent cost estimate. No network, no model calls, never
+  prompts or code ([docs/telemetry.md](docs/telemetry.md)).
+- **Configure, never fork.** What differs per project (tickets, checklist, decision records) is configuration,
+  so every project shares one copy of hat.
 
-| Shared by both tools | Claude Code adapter | Codex adapter |
-|---|---|---|
-| `AGENTS.md` (the guide), `memory/`, `odd/` (task files), `.orchestrator/` (config, checklist, scripts, hooks), `.agents/skills/` | `CLAUDE.md` (imports `AGENTS.md`), `.claude/` (settings, agents, workflow, skill copies) | `.codex/` (config, hooks, agents) |
+| Command (from the clone, `python3 scripts/hat.py …`) | What it does |
+|---|---|
+| `project add [<root>]`, `project list`, `project move`, `project remove` | register and manage projects |
+| `status` | every project apart: its resume point, active tasks, last session |
+| `doctor` | is hat installed and healthy on this machine |
+| `migrate <workspace> [--dry-run]`, then `--cleanup` | move a workspace set up the per-project way to the global install, saving its own rules verbatim first |
+| `commit <message>` | record the current project's memory and tasks in hat's home |
+
+**The per-project layer** (the `orchestrator-setup` skill writing `AGENTS.md`, `.orchestrator/`, `memory/`
+into a workspace) still works through v0.9.x; the global hooks leave such a workspace alone, and offer at
+session start to migrate it. **Codex** reads the note in `~/.codex/AGENTS.md`; its hooks and telemetry wait for
+verified payloads.
 
 ## Where it is going
 
-The plan is in [docs/meta-harness/roadmap.md](docs/meta-harness/roadmap.md): eight phases, each a release with
-an evidence gate, from closing the telemetry phase and measuring a baseline, through a multi-project registry,
-a harness capability contract, project knowledge in OKF, governance policies, code and agent intelligence, up to
+The plan is in [docs/meta-harness/roadmap.md](docs/meta-harness/roadmap.md): phases that each end in a release
+with an evidence gate. Done: the telemetry phase (v0.8.0) and the global install (v0.9.0,
+[design](docs/meta-harness/global-install.md)). Next: a measured baseline of where tokens go, then a harness
+capability contract, project knowledge in OKF, governance policies, code and agent intelligence, up to
 coordinating approved tasks across projects and harnesses. A feature that claims to save tokens has to beat the
-measured baseline, or it stays opt-in. The current state is audited in
-[docs/meta-harness/audit.md](docs/meta-harness/audit.md) and the design in
-[docs/meta-harness/architecture.md](docs/meta-harness/architecture.md).
+measured baseline, or it stays opt-in.
 
 ## Requirements
 
@@ -56,8 +70,8 @@ Ask your agent (Claude Code or Codex), in any language:
 > Install hat from https://github.com/telmoDev/hat
 
 It follows [INSTALL.md](INSTALL.md): checks your OS and prerequisites, clones the latest release to
-`~/orchestrator-setup`, links the skill into every tool you have (a symlink on macOS and Linux, a junction on
-Windows), verifies it with `bash install.sh --check`, and explains how to work with it ([USAGE.md](USAGE.md)).
+`~/orchestrator-setup`, installs hat for every project (after telling you what it changes), verifies it, and
+explains how to work with it ([USAGE.md](USAGE.md)).
 
 By hand:
 
@@ -66,30 +80,34 @@ url=https://github.com/telmoDev/hat.git
 tag=$(git ls-remote --tags --refs --sort=-v:refname "$url" 'v*' | head -1 | sed 's#.*refs/tags/##')
 git clone --branch "$tag" "$url" ~/orchestrator-setup
 cd ~/orchestrator-setup
-bash install.sh                 # both tools; or --tools claude / --tools codex
-bash install.sh --check
+bash install.sh --global          # hooks, agents, skills and a note in ~/.claude, for every project
+python3 scripts/hat.py doctor     # everything ok?
+cd <your project> && python3 ~/orchestrator-setup/scripts/hat.py project add
 ```
 
-Then, in a workspace, ask your agent to set it up ("set up the orchestrator here" / "implementa la estructura
-de orquestador"): the `orchestrator-setup` skill reads your repos, asks its questions in one message and writes
-the layer. The skill, the clone folder and the workspace paths (`.orchestrator/`, `orchestrator.conf`) keep their
-names, so existing workspaces need nothing for the rename.
+A workspace you set up the per-project way: `python3 ~/orchestrator-setup/scripts/hat.py migrate <workspace>
+--dry-run`, then without `--dry-run`, review `rules.md` with your agent, then `--cleanup` (one commit, git can
+undo it).
 
-Update by checking out a newer tag (`git fetch --tags && git checkout vX.Y.Z`; read `CHANGELOG.md` first) and then
-`bash scripts/update.sh <workspace-root>` for each workspace; remove with `bash install.sh --uninstall`.
+Update: `git fetch --tags && git checkout vX.Y.Z` in the clone (read `CHANGELOG.md` first), then
+`bash install.sh --global` again. Remove: `bash install.sh --global --uninstall` (projects' state stays in
+`~/.hat`).
 
 ## Repository
 
 - `SKILL.md`: what the setup skill does and what it asks before writing.
-- `scripts/`: `scaffold.sh` (writes the layer), `update.sh` (brings a workspace to this release),
-  `migrate.sh` (from before v0.1.0), `agent-to-codex.py`, `benchmark.py`.
-- `templates/`: the files a workspace gets.
+- `scripts/`: `hat.py` (projects, status, doctor, migrate), `hat_install.py` (the global install),
+  `hat-hook.sh` (the one entry of the global hooks), `build_guide.py`; for the per-project layer `scaffold.sh`,
+  `update.sh`, `migrate.sh`, `agent-to-codex.py`; `benchmark.py`.
+- `guide/`: what every project shares under the global install: the guide, the rules template, the agents and
+  skills, built from `templates/` by `build_guide.py`.
+- `templates/`: the per-project layer, and the scripts and hooks both installs run.
 - `benchmark/`: fixed tasks with hidden checks to compare flows without trusting a model's word.
 - `docs/`: the telemetry contract and the meta-harness plan.
 - `tests/`: unit tests and `smoke.sh`, run by CI on the three OSes.
 
 ## Versions
 
-Releases follow semver and are listed in [CHANGELOG.md](CHANGELOG.md), each with what an existing workspace
-needs to catch up. A workspace records its version in `.orchestrator/orchestrator.conf` › `TEMPLATE_VERSION`.
+Releases follow semver and are listed in [CHANGELOG.md](CHANGELOG.md), each with what an existing install or
+workspace needs to catch up.
 Maintainers cut a release with `bash release.sh <version>` from a clean `main` (notes come from *Unreleased*).

@@ -51,36 +51,34 @@ changes. **Stop and wait for the person to accept the update.** Only after an ex
 workspace up to date (its *Workspaces* lines) needs its own yes, workspace by workspace. If the folder is something else, ask the
 person for another folder. Keep the clone: both tools read the skill from it.
 
-## 4. Install the skill
+## 4. Install hat for every project
 
-From the clone, in bash (Git Bash on Windows):
+From the clone, in bash (Git Bash on Windows). First tell the person, in two lines, what the global install
+changes: it adds hat's hooks to `~/.claude/settings.json` (backed up first; every other setting kept), three
+agents, two skills and a short note to `~/.claude/CLAUDE.md`, and `bash install.sh --global --uninstall` removes
+exactly that. Install only on their yes:
 
 ```bash
-bash install.sh --tools <claude|codex|claude,codex>
-bash install.sh --tools <same> --check
+bash install.sh                      # the orchestrator-setup skill, as before
+bash install.sh --global             # hat for every project
+python3 scripts/hat.py doctor        # must end in "ok"
 ```
 
-`install.sh` links the clone as `~/.claude/skills/orchestrator-setup` (Claude Code) and
-`~/.agents/skills/orchestrator-setup` (Codex): a symlink on macOS and Linux, a directory junction on
-Windows (no admin rights needed). If it says a folder exists and is not a link, show the person the path
-and ask before moving it. `--check` must print `ok` for each tool and each required prerequisite; fix
-every `missing` line before you go on.
-
-Then make sure the skill is visible. Claude Code: it appears as `orchestrator-setup` in a new session (and
-usually in the current one). Codex: `$orchestrator-setup` or `/skills`; restart Codex if it isn't listed.
+If it says a file exists and isn't hat's, show the person the path and ask before moving it. Fix every
+`problem` line of `doctor` before you go on.
 
 ## 5. Tell the person how to work with it
 
-Don't set up any workspace yet unless the person asks: that's the skill's job, run inside the workspace.
 Read `USAGE.md` in the clone and tell the person, in at most 15 lines:
 
-- what was installed (the version from `VERSION`), where the clone is, and for which tools;
-- how to start: open their agent at the root of the folder that holds their repos and say
-  "implementa la estructura de orquestador" (or "set up the orchestrator"); the skill asks a few
-  questions and writes the files;
-- the daily routine from `USAGE.md` (*Every session*), with the commands of their tool;
-- how to update (ask the agent to update the orchestrator: it moves the clone to the latest release and
-  says what changed) and uninstall (`bash install.sh --uninstall`);
-- anything that is still missing (a login, a prerequisite) and who has to do it.
+- what was installed (the version from `VERSION`), where the clone is;
+- how to start: in a project's root, `python3 <clone>/scripts/hat.py project add`; from then on every session
+  there starts with hat's header, guide and the project's memory, and nothing is written inside the project;
+- a workspace already set up the per-project way: `hat.py migrate <workspace> --dry-run`, then without it,
+  review `rules.md` together, then `--cleanup`;
+- `hat.py status` (every project) and `hat.py doctor` (the install);
+- how to update (`git checkout` of a newer tag, then `bash install.sh --global`) and uninstall
+  (`bash install.sh --global --uninstall`; projects' state stays in `~/.hat`);
+- anything still missing (a login, a prerequisite) and who has to do it.
 
-Then offer to set up a workspace now.
+Then offer to register the project they are in.
