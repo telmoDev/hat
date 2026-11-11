@@ -253,8 +253,10 @@ def doctor():
     say(bool(claude), "claude: " + (version or "installed") if claude else "claude: not found on PATH")
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     import hat_install
-    lacking = hat_install.missing()
-    say(not lacking, "global install" + (": missing %d (bash install.sh --global)" % len(lacking) if lacking else ""))
+    for cdir in hat_install.installed_dirs() or [hat_install.claude_dir()]:
+        lacking = hat_install.missing(cdir)
+        say(not lacking, "global install (%s)" % cdir + (": missing %d (CLAUDE_CONFIG_DIR=%s bash install.sh --global)"
+                                                         % (len(lacking), cdir) if lacking else ""))
     if os.path.isdir(home()):
         dirty = git("status", "--porcelain").stdout.strip() if os.path.isdir(os.path.join(home(), ".git")) else None
         say(dirty is not None, "hat's home %s is a git repo" % norm(home()) if dirty is not None

@@ -31,7 +31,7 @@ def snapshot(root):
     return out
 
 
-class Install(unittest.TestCase):
+class Base(unittest.TestCase):
     def setUp(self):
         self.home = os.path.realpath(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, self.home, True)
@@ -62,6 +62,8 @@ class Install(unittest.TestCase):
         with open(os.path.join(self.claude, "agents", "reviewer.md"), "w") as f:
             f.write("my agent\n")
 
+
+class Install(Base):
     def test_install_wires_every_hook_once_through_the_hat_entry(self):
         code, out = self.run_install("install")
         self.assertEqual(code, 0, out)
@@ -103,7 +105,7 @@ class Install(unittest.TestCase):
         with open(os.path.join(self.claude, "CLAUDE.md"), encoding="utf-8") as f:
             self.assertTrue(f.read().startswith("# My own notes\n"))
         backups = os.listdir(os.path.join(self.home, ".hat", "backup"))
-        self.assertTrue(any(b.startswith("settings.json") for b in backups))
+        self.assertTrue(any("settings.json" in b for b in backups))
 
     def test_a_second_install_changes_nothing(self):
         self.user_setup()
@@ -151,7 +153,7 @@ class Install(unittest.TestCase):
         os.symlink(os.path.join(REPO, "guide", "skills", "pre-pr-review"), old)
         m = os.path.join(self.home, ".hat", "install.json")
         data = json.load(open(m))
-        data["links"].append(old)
+        data["installs"][os.path.realpath(self.claude).replace("\\", "/")]["links"].append(old)
         json.dump(data, open(m, "w"))
         self.run_install("install")
         self.assertFalse(os.path.lexists(old))
@@ -179,7 +181,7 @@ class Install(unittest.TestCase):
         self.assertTrue(any(HOOK in c for c in self.commands("SessionStart")))
 
 
-class ConfigDirs(Install):
+class ConfigDirs(Base):
     """Several Claude Code accounts on one machine (CLAUDE_CONFIG_DIR): one hat, one ~/.hat, wired into each."""
 
     def run_in(self, config_dir, *args):

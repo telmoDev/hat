@@ -11,6 +11,13 @@ into the new version's section.
 
 ## Unreleased
 
+- One hat for several Claude Code accounts: the global install honours `CLAUDE_CONFIG_DIR`
+  (`CLAUDE_CONFIG_DIR=~/.claude-work bash install.sh --global` wires the account that alias uses). Every account's
+  hooks call the same clone and share `~/.hat`, so projects, memory and telemetry are the same whichever account
+  runs the session. What was installed is recorded per config folder (a v0.9.0 record reads as `~/.claude`'s);
+  uninstalling one account leaves the others whole, including the Codex links they share; `hat doctor` checks
+  every account hat is installed in.
+
 - Per-project git settings as configuration (roadmap X4), from migrating a real workspace that had forked its
   scripts for them: `PR_TARGETS` (per repo, the branch PRs open into when it isn't the base they branch from;
   `push-pr.sh` opens the PR there and never pushes it, `memory-state.sh` never lists it for cleanup) and

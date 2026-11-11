@@ -89,6 +89,10 @@ A workspace you set up the per-project way: `python3 ~/orchestrator-setup/script
 --dry-run`, then without `--dry-run`, review `rules.md` with your agent, then `--cleanup` (one commit, git can
 undo it).
 
+Another Claude Code account on the same machine (an alias with its own `CLAUDE_CONFIG_DIR`, e.g.
+`~/.claude-work`): `CLAUDE_CONFIG_DIR=~/.claude-work bash install.sh --global` wires it too. Both accounts use the
+same clone and the same `~/.hat`: one hat, the same projects, memory and telemetry; each account keeps its own quota.
+
 Update: `git fetch --tags && git checkout vX.Y.Z` in the clone (read `CHANGELOG.md` first), then
 `bash install.sh --global` again. Remove: `bash install.sh --global --uninstall` (projects' state stays in
 `~/.hat`).
