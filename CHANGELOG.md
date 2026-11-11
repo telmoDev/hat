@@ -11,6 +11,8 @@ into the new version's section.
 
 ## Unreleased
 
+## v0.9.0 — 2026-11-10
+
 - README and INSTALL describe hat as it is now: installed once for every project (`bash install.sh --global`),
   projects registered with `hat.py project add`, their state in `~/.hat/projects/<id>/`, the commands
   (`status`, `doctor`, `migrate`, `commit`), and the per-project layer still supported through v0.9.x. An agent
