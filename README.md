@@ -1,13 +1,17 @@
 # hat
 
+**Harness Augmentation & Orchestration Toolkit**
+
 > **Agents:** if a person gave you this link to install it, follow [INSTALL.md](INSTALL.md) step by step.
 
-**hat** is a runtime-agnostic meta-harness designed to enhance, coordinate, govern, and optimize existing AI
-coding harnesses through shared knowledge, observability, interoperability, and intelligent orchestration.
+An intelligent, extensible layer that enhances AI coding harnesses, complementing their native capabilities with
+persistent memory, work direction, coordination, observability and governance.
 
-It is local-first and sits above the harnesses you already use (Claude Code today, Codex in part). It started as
-the `orchestrator-setup` skill and grows toward that goal one release at a time; each release works on its own,
-and *What it does today* says which parts exist now.
+**It doesn't replace the harness. It makes it work better.**
+
+hat is local-first and works with the harnesses you already use (Claude Code today, Codex in part). It started
+as the `orchestrator-setup` skill and grows one release at a time; each release works on its own, and *What it
+does today* says which parts exist now.
 
 ## What it does today
 
