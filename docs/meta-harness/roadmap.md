@@ -1,5 +1,8 @@
 # Roadmap: orchestrator → meta-harness
 
+Goal: hat is a runtime-agnostic meta-harness designed to enhance, coordinate, govern, and optimize existing AI
+coding harnesses through shared knowledge, observability, interoperability, and intelligent orchestration.
+
 Status: proposal, not approved (2026-11-06). Inputs: [audit.md](audit.md), [architecture.md](architecture.md).
 Each task becomes an `odd/tasks/` file (or a small-task brief) when the user starts it; nothing here is in flight.
 
