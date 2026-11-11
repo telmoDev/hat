@@ -143,7 +143,7 @@ Lasting rules agreed with the user for working in this workspace. The orchestrat
 
 ## Git
 
-An agent may create its branch and commit to it, but it never pushes: the orchestrator publishes with `bash .orchestrator/scripts/push-pr.sh <repo> <branch> <base> <title> <body-file>` (which pushes and opens the PR) only after the pre-PR gate of step 4, and fetches through `GIT_WRAPPER` from `.orchestrator/orchestrator.conf` when one is set. Nobody merges or pushes to a repo's base branch (the *Base branch* column under Layout), and nobody bypasses its protections or required reviews.
+An agent may create its branch and commit to it, but it never pushes: the orchestrator publishes with `bash .orchestrator/scripts/push-pr.sh <repo> <branch> <base> <title> <body-file>` (which pushes and opens the PR, into the repo's `PR_TARGETS` branch when it has one, running `gh` as `GH_USER` when set) only after the pre-PR gate of step 4, and fetches through `GIT_WRAPPER` from `.orchestrator/orchestrator.conf` when one is set. Nobody merges or pushes to a repo's base branch (the *Base branch* column under Layout), and nobody bypasses its protections or required reviews.
 
 - **Conventions.** Commit messages, PR titles and branch names follow each repo's own convention (its guide, or its section under *Repo guides*). Where a repo has none, the default is Conventional Commits (`type(scope): imperative subject`, at most 72 characters) and branches named `<type>/<topic>`. `orchestrator.conf` enforces only what the user set there.
 - **Commits.** One logical change each, on a branch cut from `origin/<base>`. Never commit secrets, credentials, `.env` files, build output or local config. History already pushed for review is never rewritten.
