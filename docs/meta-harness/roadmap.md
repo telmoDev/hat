@@ -23,7 +23,7 @@ little at a time.
 - **Prioritize by the harness's experience and reliability.** A feature goes ahead when it makes the work with
   the harness more reliable or easier to continue, not because it is on a list.
 - **Measured against the baseline.** Every feature that adds context or claims to save tokens or time is
-  compared with the baseline (§5, *Now*). A feature that doesn't beat it stays opt-in or is dropped. This keeps
+  compared with the baseline (§6, *Now*). A feature that doesn't beat it stays opt-in or is dropped. This keeps
   hat from spending more on coordinating than it saves.
 - **One step = one release.** Each release is useful on its own; nothing half-built is left in the template.
   A step ends only when every exit criterion has evidence (a test, a command, a report), never on trust.
@@ -60,7 +60,7 @@ model's reasoning or change it from inside: it interrupts and gives evidence, wh
 ## 3. Priorities
 
 Approved by the user 2026-11-11. The earlier phases aren't dropped: their tasks are regrouped under these
-priorities (§5), and the order inside each comes from the baseline.
+priorities (§6), and the order inside each comes from the baseline.
 
 | Priority | Subsystem | Goal | Tasks |
 |---|---|---|---|
@@ -70,9 +70,9 @@ priorities (§5), and the order inside each comes from the baseline.
 | P1 | Observability | know what is happening | O1 |
 | P1 | Governance | no unauthorized actions | GV1, GV2 |
 | P2 | Multi-Harness | Codex and others | GV3, A2 |
-| P3 | Intelligence | optimization and learning | C1–C3, A1, K4, K5, M2–M4 |
+| P3 | Intelligence | optimization and learning | C1–C3, A1, TC1, K4, K5, M2–M4 |
 
-Before P0 come the consolidation of v0.9.x and the baseline (§5, *Now*): P0's goals ("reliable", "continuity")
+Before P0 come the consolidation of v0.9.x and the baseline (§6, *Now*): P0's goals ("reliable", "continuity")
 need a metric to be checked off.
 
 ## 4. Capability discovery
@@ -99,7 +99,27 @@ What is automatic and what isn't:
 This needs versioned adapters and compatibility tests (H1, H2). A known overlap today: Claude Code's native
 auto-memory and hat's `memory/` load side by side (KE3 settles it).
 
-## 5. Steps
+## 5. Token cost
+
+Agreed with the user 2026-11-11. Saving tokens is not a third engine: each lever below maps to a task in §6, and
+none counts as a saving until the baseline measures it. Savings are judged by **cost**, not raw tokens: a token
+read from the prompt cache costs about a tenth of a fresh one, so counting tokens alone overstates what removing
+repeated, cached text saves.
+
+| # | Lever | Where hat may save | Task | Today |
+|---|---|---|---|---|
+| 1 | Token observability | measure input, output, cache and cost by agent, task and project | R5 | built: `telemetry.py` records all four token kinds and an API-equivalent cost, by agent, model, task, run and project; R5 adds the instrumentation's own cost |
+| 2 | Context optimizer | only the knowledge, decisions and files the task needs | KE2 | the Knowledge Engine's retrieval; built once, not twice |
+| 3 | Task routing | no extra agents or expensive models when a task can be done directly | A1 | model tiers and the small-task path exist; when to work directly or delegate comes from the data |
+| 4 | Exploration cache | reuse code exploration while the repo hasn't changed in a relevant way | C1, C2 | gated by D7; keyed by git commit so it never serves stale results |
+| 5 | Session compression | state summaries that keep objectives, decisions, results, pending work and references | — | the harness compacts natively; hat complements it (PreCompact save, session handoff, `sync-memory`), each summary checked against git. Improve these, don't add a compressor |
+| 6 | Context deduplication | repeated instructions and docs across agents | TC1 | last: repeated static text is mostly cached already; the real cost is agents that start cold and reread code, which levers 2 and 4 address |
+
+Delegating is not free in either direction: the orchestrator runs on the most expensive model and already takes
+about 51 % of the tokens, so work done directly avoids a cold start but costs top-tier tokens, and work delegated
+costs a cheaper model plus the cold start. Which is cheaper depends on the task type, and A1 settles it per type.
+
+## 6. Steps
 
 Complexity: S (≤ 1 day), M (2–4 days), L (≥ 1 week). Token impact = what the feature adds to a normal session
 once shipped. Each track starts with a short design doc that states its metric.
@@ -209,7 +229,10 @@ Built only where the baseline shows the gain (D7); each feature has an A/B with 
 **C1 · Symbol and import index** · M · incremental by `git diff`; `ast` for Python, `universal-ctags` otherwise.
 **C2 · Queries `where|refs|impact|context`** · M · deps: C1.
 **C3 · A/B on B1 and B3** · S, quota · deps: C2, R6.
-**A1 · Recommendation table** · M · deps: R5, R6 · tier vs quality and cost per task type; never rewires tiers.
+**A1 · Recommendation table** · M · deps: R5, R6 · tier vs quality and cost per task type, and direct work vs
+delegation (§5); never rewires tiers.
+**TC1 · Context deduplication** · S · deps: R5 · only if the baseline shows repeated context that isn't cached
+(§5).
 **K4 · llm-wiki evaluation spike (optional)** · S · deps: K1, D2.
 **K5 · Shares and global knowledge** · M · deps: K2, GV1 · knowledge between projects only under policy.
 **M2 · Routing recommendation** · S · deps: X2, GV1 · which harness fits a task; recommends, never acts.
@@ -217,14 +240,14 @@ Built only where the baseline shows the gain (D7); each feature has an A/B with 
 default (D8).
 **M4 · Safe parallelism** · L · deps: M3, A1.
 
-## 6. Decisions
+## 7. Decisions
 
 | # | Decision | Needed by | Recommendation |
 |---|---|---|---|
 | D1 | What the rename to `hat` covers | done | applied in #26: URLs + name in prose; paths kept |
 | D9 | Docs language | done | **decided 2026-11-06: English** |
 | D5 | Global location | done | **changed 2026-11-10**: `~/.hat/`; see [global-install.md](global-install.md) §9 |
-| D10 | Identity, flow and priorities | done | **decided 2026-11-11**: the identity above, §2 and §3 |
+| D10 | Identity, flow, priorities and token cost | done | **decided 2026-11-11**: the identity above, §2, §3 and §5 |
 | D11 | What V3 (commit scope) covers | Now | the user's |
 | D2 | llm-wiki has no licence | Knowledge Engine | native provider; ask the author; optional provider if licensed |
 | D3 | OKF version | Knowledge Engine | v0.2, pinned per bundle; read v0.1 with fallbacks (applied in K1) |
@@ -233,11 +256,11 @@ default (D8).
 | D7 | Which intelligence track first, and whether C1–C3 are built | P3 | from the baseline: C1 only if exploration ≥ ~20 % of tokens |
 | D8 | Headless dispatch | P3 | opt-in per task, after governance |
 
-## 7. Risks
+## 8. Risks
 
 | Risk | Effect | Mitigation |
 |---|---|---|
-| Coordination overhead (orchestrator already ~51 % of tokens) | hat costs more than it saves | every gate compares with the baseline; a context budget per engine; defaults only after a measured gain |
+| Coordination overhead (orchestrator already ~51 % of tokens) | hat costs more than it saves | every gate compares with the baseline by cost (§5); a context budget per engine; defaults only after a measured gain |
 | A harness feature makes part of hat obsolete | duplicated work, two sources of truth | capability discovery (§4); delegate to the harness when it covers the need |
 | Rigid checks get in the model's way | false blocks, worse work | signals are evidence; blocking only on the user's rules; a false-positive case in each gate |
 | Claude transcript format is private | usage turns `unavailable` after an update | parser versioned, coverage in every report, H1 warns on a new version |
@@ -247,7 +270,7 @@ default (D8).
 | Scope (one maintainer) | half-built layers | each step ships alone; P2 and P3 can be cut without breaking P0 and P1 |
 | Cross-project leaks | one project's data reaches another | read-only registry, allowlisted shares, secret check, governance before sharing |
 
-## 8. Next step
+## 9. Next step
 
 Consolidation (V1–V4) while the baseline collects data (R5). The two P0 design docs (KE1, DE1) can be written
 in the meantime; their code waits for the baseline.
