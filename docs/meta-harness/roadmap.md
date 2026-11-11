@@ -1,301 +1,253 @@
-# Roadmap: orchestrator → meta-harness
+# Roadmap: hat
 
-Goal: hat, the Harness Augmentation & Orchestration Toolkit, is an intelligent, extensible layer that enhances AI
-coding harnesses, complementing their native capabilities with persistent memory, work direction, coordination,
+Status: direction approved by the user 2026-11-11 (identity, flow, priorities). Each track's design doc and tasks
+are approved when the user starts them. Inputs: [audit.md](audit.md), [architecture.md](architecture.md),
+[global-install.md](global-install.md). Each task becomes an `odd/tasks/` file (or a small-task brief) when the
+user starts it.
+
+**hat — Harness Augmentation & Orchestration Toolkit.** An intelligent, extensible layer that enhances AI coding
+harnesses, complementing their native capabilities with persistent memory, work direction, coordination,
 observability and governance. It doesn't replace the harness; it makes it work better.
 
-Status: proposal, not approved (2026-11-06). Inputs: [audit.md](audit.md), [architecture.md](architecture.md).
-Each task becomes an `odd/tasks/` file (or a small-task brief) when the user starts it; nothing here is in flight.
+hat is this repository evolved, not a new project (user, 2026-11-06): it keeps working at every step and grows a
+little at a time.
 
-The meta-harness is this repository evolved, not a new project (user, 2026-11-06): the orchestrator template
-keeps working at every step and becomes the meta-harness phase by phase, a little at a time.
+## 1. Principles
 
-## 1. How the phases work
+- **Structure and evidence, not rigid rules.** hat doesn't replace Claude's reasoning. It gives it structure
+  (outcome, tasks, criteria), evidence (tests, git, telemetry) and ways to correct course (warnings, gates,
+  resume points), so the model reasons better. A check informs or stops an action; it never decides the solution.
+- **Don't duplicate what the harness does natively without a reason.** When a harness adds a capability that
+  covers part of hat, hat evaluates delegating that part to it (§4). hat complements the harness's limits; it
+  doesn't compete with its features.
+- **Prioritize by the harness's experience and reliability.** A feature goes ahead when it makes the work with
+  the harness more reliable or easier to continue, not because it is on a list.
+- **Measured against the baseline.** Every feature that adds context or claims to save tokens or time is
+  compared with the baseline (§5, *Now*). A feature that doesn't beat it stays opt-in or is dropped. This keeps
+  hat from spending more on coordinating than it saves.
+- **One step = one release.** Each release is useful on its own; nothing half-built is left in the template.
+  A step ends only when every exit criterion has evidence (a test, a command, a report), never on trust.
+- **Deterministic before model, read before write, one project before many, policy before execution.**
 
-- **One phase = one release.** Each phase ends in a version that is useful on its own. If the project stopped
-  after any phase, what shipped still works and nothing half-built is left in the template.
-- **Entry conditions and an exit gate.** A phase starts only when its entry conditions hold and its decisions
-  are taken. It ends only when every exit criterion has evidence (a test, a command, a report). A criterion that
-  can't be verified keeps the phase open; it is never ticked on trust.
-- **Measured against the baseline.** From phase 1 on, every feature that claims to save tokens or time is
-  compared with the phase-1 baseline. A feature that doesn't beat it stays opt-in or is dropped. This is how
-  the meta-harness avoids spending more on coordinating than it saves.
-- **Deterministic before model, read before write, one project before many, policy before execution.** The order
-  below follows these four rules.
-- **Work inside a phase** can run in parallel when it has no dependency; across phases, only the tasks marked
-  *early start* (no dependencies, no shipped behaviour until their phase).
+## 2. The flow
 
-## 2. Phases at a glance
-
-Reordered 2026-11-10 (user): hat is installed globally, so the global install comes first, as phase 1 (v0.9.0);
-the baseline is gathered on it. Later phases keep their content; their release numbers shift by one minor.
-
-| Phase | Name | Release | Brief | Gate in one line |
-|---|---|---|---|---|
-| 0 | Close F1 | v0.8.0 | F1 + session memory | telemetry and session handoff live on one real workspace |
-| 1 | Global install | v0.9.0 | Meta-Harness Core, Projects | one install for every project, nothing in the repos ([global-install.md](global-install.md)) |
-| 1b | Baseline | v0.9.x | F1, F3 (data) | we know where the tokens go, with a valid sample, gathered on the global install |
-| 2 | Multi-project core | v0.10.0 | Harness Abstraction, cross-project views | the remaining phase-2 work the global install doesn't cover |
-| 3 | Project knowledge | v0.10.0 | Knowledge Platform (project scope) | knowledge exported and queried with no net token increase |
-| 4 | Governance | v0.11.0 | F4 | a policy floor no project can loosen, compiled into each runtime |
-| 5 | Code and agent intelligence | v0.12.0 | F2, F3 | each feature beats the baseline or stays opt-in |
-| 6 | Sharing and routing | v0.13.0 | Knowledge (shared/global), F5 routing | knowledge shared under policy; routing recommends, never acts |
-| 7 | Meta-harness execution | v1.0.0 | F5 | opt-in dispatch, recovery and safe parallelism, measured |
+How a task goes through hat once both engines exist. Claude Code does the work with its own agents, skills and
+tools; hat prepares it, follows it and learns from it.
 
 ```mermaid
 flowchart LR
-  P0[0 Close F1] --> P1[1 Baseline]
-  P1 --> P2[2 Multi-project core]
-  P2 --> P3[3 Project knowledge]
-  P2 --> P4[4 Governance]
-  P1 --> P5[5 Code and agent intelligence]
-  P3 --> P5
-  P3 --> P6[6 Sharing and routing]
-  P4 --> P6
-  P4 --> P7[7 Execution]
-  P5 --> P7
-  P6 --> P7
+  U[User asks for a task] --> K[Knowledge Engine<br/>decisions, architecture,<br/>conventions, past work]
+  K --> D[Direction Engine<br/>outcome, tasks,<br/>dependencies, criteria]
+  D --> C[Claude Code<br/>its own agents, skills,<br/>tools and capabilities]
+  C --> O[Observability & Evaluation<br/>progress, changes, tests,<br/>deviations, results]
+  O --> N[Knowledge updated<br/>and next step]
+  N -.-> K
+  O -.->|deviation| D
 ```
 
-Phases 3 and 4 can run in parallel after phase 2. Phase 5 needs the baseline (1) and uses project knowledge (3).
-Phase 7 needs governance (4) before any dispatch.
+| Step | What exists today | What is missing |
+|---|---|---|
+| Knowledge Engine | session start loads `NEXT_STEPS`, `PROJECT_STATE` and the decision index; OKF validator (K1) | **picking what is relevant to the current task**; one memory model beside the harness's native memory |
+| Direction Engine | ODD outcome and criteria, `odd/tasks/` with tasks, dependencies and status, resume against git | the pieces linked into one model; dependencies across projects (M1) |
+| Claude Code | hat briefs its agents and never replaces them | — |
+| Observability & Evaluation | telemetry per run, pre-PR gate, TDD gate, criteria with evidence | **checking the work against the plan while it runs**, not only at the PR |
+| Knowledge updated | `sync-memory`, session handoff, compaction recovery | an automatic update when a task closes (K2, K3) |
 
-### Why this order and not the brief's
+What the harness allows (Claude Code, 2026-11-11): context can be added at `SessionStart` and
+`UserPromptSubmit`; every tool call is seen at `PostToolUse` and can be warned about or blocked. hat can't see the
+model's reasoning or change it from inside: it interrupts and gives evidence, which is the first principle.
 
-- **Baseline before building.** F2, F3 and F5 all claim to save tokens; with zero real rows we can't tell where
-  tokens go. Phases 0–1 make every later decision evidence-driven.
-- **Project/harness core before knowledge.** Knowledge scopes need a project id and a registry first.
-- **Native OKF v0.2 before llm-wiki.** llm-wiki has no licence and targets OKF v0.1 (architecture §3.2).
-- **Governance before anything crosses a project boundary or runs unattended** (phases 6 and 7), as the brief asks.
-- **F2 and F3 together, after the baseline**: both are "pick better context / pick a better agent", both are
-  judged by the same benchmark, and the data decides which gets built first.
+## 3. Priorities
 
-## 3. Phases
+Approved by the user 2026-11-11. The earlier phases aren't dropped: their tasks are regrouped under these
+priorities (§5), and the order inside each comes from the baseline.
+
+| Priority | Subsystem | Goal | Tasks |
+|---|---|---|---|
+| P0 | Knowledge Engine | reliable memory | KE1–KE4, K2, K3 |
+| P0 | Direction Engine | direction and continuity | DE1–DE3, M1 |
+| P1 | Harness Integration | deep integration with Claude Code | H1, H2 |
+| P1 | Observability | know what is happening | O1 |
+| P1 | Governance | no unauthorized actions | GV1, GV2 |
+| P2 | Multi-Harness | Codex and others | GV3, A2 |
+| P3 | Intelligence | optimization and learning | C1–C3, A1, K4, K5, M2–M4 |
+
+Before P0 come the consolidation of v0.9.x and the baseline (§5, *Now*): P0's goals ("reliable", "continuity")
+need a metric to be checked off.
+
+## 4. Capability discovery
+
+Harnesses change fast; a feature the vendor ships can make part of hat obsolete. hat keeps track of what each
+harness does, and reacts:
+
+| Situation | What hat does |
+|---|---|
+| The harness adds a capability | detect it and evaluate integrating it |
+| The harness improves its memory | use it, and complement only its limits |
+| The harness adds hooks | adapt the integrations |
+| The harness changes its agents | update the adapter |
+| The harness ships something that replaces a hat function | evaluate delegating that function to the harness |
+
+What is automatic and what isn't:
+
+- **Automatic**: hat detects that the harness changed version and that an integration broke (its compatibility
+  tests fail, a parser goes `unavailable`). The base exists: `templates/orchestrator/scripts/harness.py` declares
+  each capability `verified`, `unverified` or `unsupported`, and [harnesses.md](../harnesses.md) is checked against it.
+- **Not automatic**: what a new feature does and whether it replaces something in hat. That needs the harness's
+  release notes; hat turns them into a report and the user decides.
+
+This needs versioned adapters and compatibility tests (H1, H2). A known overlap today: Claude Code's native
+auto-memory and hat's `memory/` load side by side (KE3 settles it).
+
+## 5. Steps
 
 Complexity: S (≤ 1 day), M (2–4 days), L (≥ 1 week). Token impact = what the feature adds to a normal session
-once shipped.
+once shipped. Each track starts with a short design doc that states its metric.
 
-### Phase 0 · Close F1 → v0.8.0
+### Done
 
-- **Goal**: what F1 built is released, documented and running on one real workspace, and a session's state
-  survives even when the model doesn't save it.
-- **Entry**: now. **Decisions before starting**: D1 (rename scope, the release's install URL depends on it),
-  D9 (docs language). **Needed from the user**: the original F1-01…F1-14 texts, if they live outside the repo.
-- **Exit gate**:
-  - every event type and key in `telemetry.py` is in the contract doc, checked by a test;
-  - every F1-xx criterion is traceable to a test or a recorded manual check;
-  - phase-1 review findings fixed or accepted; smoke and unit tests green on 3 OSes;
-  - v0.8.0 released; one workspace updated with its user files unchanged; one live session shows main and agent
-    usage with coverage, and the deferred `SubagentStart`/`PostToolUseFailure` payload check is done;
-  - S1's five criteria pass, including one real session ended without `sync-memory`.
-- **Out of scope**: anything multi-project, knowledge, policy.
+- **v0.8.0, close F1** (2026-11-10): telemetry contract (R1–R3), session handoff (S1), rename to hat (X3).
+- **v0.9.0, global install** (2026-11-10): one install for every project, nothing in the repos; registry and
+  `hat status` (X1), `hat doctor`, migrate and cleanup, compaction recovery ([global-install.md](global-install.md)).
+- Early starts already shipped: harness capability contract (X2, `harness.py`), projects configure and never fork
+  (X4), native OKF v0.2 validator (K1, `knowledge.py`).
+- **v0.9.1, v0.9.2**: fixes from live use (CHANGELOG).
 
-**R1 · Telemetry contract document and F1 spec in the repo** · S · deps: —
-- `docs/telemetry.md`: event types, keys, statuses, sources, schema and migrations, privacy rules, parser
-  versioning, F1-01…F1-14 with the test that proves each. Four (06, 07, 11, 12) are cited by no test today.
-- Criteria: a test compares the doc with the contract in code; each F1-xx has a test or "verified by hand: <how>".
-- Tokens: 0.
+### Now · Consolidation and baseline → v0.9.x (fixes only)
 
-**R2 · Global vs project metrics: decision** · S · deps: R1
-- All metrics stay in each project's store; a global view may only read registered stores (phase 2). No global
-  store. Recorded in R1's doc. Tokens: 0.
+- **Goal**: v0.9 solid on real use, and data on where tokens and time go.
+- **Exit gate**: V1–V4 each closed with evidence; two weeks of normal work on the registered projects and one
+  `metrics` report per project; B1–B5 with n = 3 a side; a one-page `docs/meta-harness/baseline.md` with the
+  metrics P0 will be judged by.
 
-**R3 · Phase-1 review** · M · deps: R1
-- Privacy (`errors.log` content, `transcript_path` retention), hook latency (`ingest_log` p95 < 100 ms),
-  failure isolation, update path v0.7.0 → current. Findings fixed in their own PRs or accepted.
+**V1 · Docs in sync** · S · README, INSTALL, USAGE, guide and this roadmap say what v0.9 does.
+**V2 · Installer and uninstaller review** · M · `scripts/hat_install.py`: what it writes, what `--uninstall`
+removes, behaviour with links, other accounts and a partial install; findings fixed in their own PRs.
+**V3 · Commit scope** · S · scope to be defined by the user (D11).
+**V4 · Migrations and recovery** · M · `scripts/hat_migrate.py` and the recovery paths (handoff, compaction):
+each verified on a copy of a real workspace, interrupted runs included.
+**R5 · Field data and baseline report** · S (mostly waiting) · main vs agent tokens, by agent type and task size,
+coverage, attempts, criteria pass rate, and **the cost of the instrumentation itself**.
+**R6 · Benchmark, valid sample** · S, quota-bound · only on the user's go.
 
-**S1 · Automatic session handoff** · M · deps: — (asked by the user 2026-11-06)
-- Today `memory/` survives a session only if the orchestrator runs `sync-memory`. S1 adds a deterministic
-  draft of where the work stopped, shown at the next start only when the session didn't sync.
-- At `SessionEnd` (Claude Code), `session-handoff.py` writes `.orchestrator/state/handoff.md` (git-ignored,
-  overwritten): session id and end time; per repo the branch, uncommitted files (count, capped paths) and
-  commits ahead of `origin/<base>`; each active `odd/tasks/*.md` with its `Next:` and tasks not `done`; agent
-  runs started and never finished (telemetry, when present); whether `memory/` changed during the session.
-- A session killed without `SessionEnd` is caught at the next `SessionStart`, as the main-session usage is today.
-- At `SessionStart`, only if the last session didn't update `memory/`: the draft as context (≤ ~150 words) and
-  one instruction, offer to reconcile it through `sync-memory`.
-- Git local only (no `gh`, no network), no file contents, prompts or diffs; never writes `memory/`. Codex: the
-  start-side recovery works; its end event is used once its payload is verified.
-- Files: `templates/orchestrator/scripts/session-handoff.py`, `hooks/session-memory.sh`,
-  `templates/claude/settings.json`, `templates/gitignore`, one sentence in `AGENTS.md`, `update.py` rules, tests.
-- Criteria: O1 an unsynced session leaves a draft naming dirty branches, active task files and unfinished runs ·
-  O2 shown at the next start, nothing after a synced session · O3 a killed session is recovered · O4 no contents,
-  prompts, diffs or secrets · O5 no network or model, never blocks, < 200 ms on the smoke workspace.
-- Tokens: 0 after a synced session; ≤ ~200 after an unsynced one (instead of a rebuild from git).
+### P0 · Knowledge Engine → v0.10.0
 
-**X3 · Rename follow-through** · S · deps: D1
-- README, INSTALL, update notice and release notes point to `telmoDev/hat`. Recommended: keep paths
-  (`.orchestrator/`, `orchestrator.conf`, skill `orchestrator-setup`) because every workspace has them.
+- **Goal**: reliable memory. The model gets what this task needs from the project's history, and nothing else.
+- **Entry**: baseline. **Decisions**: D2, D3, D4 (D3 and D4 already applied in K1).
+- **Exit gate**: on the baseline projects, a resumed session starts from the right point more often and tokens per
+  large task don't rise; retrieval never loads more than its budget; nothing failing the secret check is stored.
 
-**R4 · Release v0.8.0 and update one real workspace** · S · deps: R3, S1, X3
-- `release.sh 0.8.0` after the user merges; `scripts/update.sh` on the workspace the user picks, on their go,
-  from a clean `git status`; one live session for the payload check.
+Four kinds of memory, most already written by hat today:
 
-### Phase 1 · Baseline → v0.8.x (fixes only)
+| Memory | Holds | Today |
+|---|---|---|
+| Episodic | what happened | `PROGRESS.md`, task-file run logs, telemetry, handoff |
+| Semantic | what the project knows | `PROJECT_STATE.md`, project rules, architecture docs |
+| Decisional | why a solution was chosen | `DECISIONS.md`, decision records, `decision-index.sh` |
+| Procedural | how tasks are done here | the guide, agents, skills, the checklist |
 
-- **Goal**: know where tokens and time go in real work, and have a valid benchmark sample.
-- **Entry**: phase 0 gate passed. **Decisions**: the model and the go for benchmark runs (they spend quota).
-- **Exit gate**:
-  - two weeks of normal work on the updated workspace and one `metrics` report: main vs agent tokens, by agent
-    type and task size, coverage, attempts, criteria pass rate, instrumentation overhead;
-  - B1–B5 on the current hashes, both flows, n = 3 a side, versioned; `telemetry.py benchmark` reading;
-  - a one-page baseline in `docs/meta-harness/baseline.md` and a recommendation on which of phase 5's tracks
-    to build first (D7).
-- **Early start allowed** during the two weeks: X2 and K1 (no shipped behaviour until their phase).
+**KE1 · Design doc and metric** · S · the four memories, what each answers, how retrieval is judged.
+**KE2 · Retrieval for the current task** · M · deps: KE1, K2 · at `UserPromptSubmit` or step 1 of the flow,
+the few entries that match the task (deterministic first: paths, terms, decision ids), within a token budget.
+**KE3 · One memory model beside the native one** · S · what goes to the harness's native memory (user
+preferences, feedback) and what to hat's (project state, decisions, tasks); no fact kept in both.
+**KE4 · Decisions linked to code and tasks** · M · deps: K2 · a decision knows the paths and tasks it affects,
+so retrieval can find it from a file.
+**K2 · Deterministic export** · M · deps: K1, X1 · `knowledge.py export` from `DECISIONS.md` and done task files;
+`sources` point at the originals. Tokens: 0.
+**K3 · Query and ODD wiring** · S · deps: K2 · `knowledge.py query`; export runs when a task reaches `done`.
 
-**R5 · Field data and baseline report** · S (mostly waiting) · deps: R4 · Tokens: instrumentation only.
-**R6 · Benchmark, valid sample** · S, quota-bound · deps: R4.
+### P0 · Direction Engine → v0.11.0 (can run beside the Knowledge Engine)
 
-### Phase 2 · Multi-project core → v0.9.0
+- **Goal**: direction and continuity. The work keeps its outcome from request to PR, and a drift is caught while
+  it is cheap to fix.
+- **Entry**: baseline.
+- **Exit gate**: a seeded drift (a file outside the task, repeated failures on one check) is reported during the
+  session, not at the PR; no check blocks a legitimate change in the smoke workspace; the warning cost stays
+  within its budget.
 
-- **Goal**: the meta-harness knows which projects exist, which harnesses each can use and what they can do,
-  without any project depending on another.
-- **Entry**: phase 1 gate. **Decisions**: D5 (global location `~/.hat/`).
-- **Exit gate**: two scaffolded workspaces registered and shown apart; an unregistered one is never read; no file
-  under any project is written by the global view; every existing telemetry test passes unchanged behind the
-  harness contract; `hat doctor` lists each runtime's verified capabilities; a workspace without `~/.hat/` works
-  exactly as before (smoke).
+**DE1 · Design doc and metric** · S · keep objectives, break down tasks, manage dependencies, detect deviations,
+validate results, recover course; which exist (ODD) and which are new.
+**DE2 · Deviation signals** · M · deps: DE1 · at `PostToolUse`, deterministic signals against the active task
+file: files outside its scope, the same check failing again, work on a task whose dependency isn't done. A
+signal is evidence shown to the model; it blocks only where a rule of the user's says so.
+**DE3 · Course recovery** · S · deps: DE2 · on a signal, the task's outcome, criteria and `Next:` back in context,
+and the run log records it.
+**M1 · Cross-project dependencies** · S · deps: X1 · `hat status` shows cycles, blocked tasks, stale *Resume* items.
 
-**X1 · Project registry and read-only global view** · M · deps: R2
-- `~/.hat/projects.toml` (id, root, repos, harnesses); `hat project add|list|remove`; `hat status` reads each
-  registered store read-only (tasks in flight, last runs, usage); a missing root is reported, not fatal.
-- Files: `scripts/hat.py`, read-only open in `telemetry.py`, tests. Tokens: 0.
+### P1 · Harness Integration
 
-**X2 · Harness capability contract; Claude adapter behind it** · M · deps: — (early start)
-- `capabilities()` + `health_check()` per adapter; Claude moved behind it with no behaviour change; a Codex stub
-  declaring only what is verified (SessionStart hooks, `usage: unavailable`).
-- Files: `templates/orchestrator/scripts/adapters/`, `telemetry.py`. Tokens: 0.
+**H1 · Versioned adapters** · S · deps: X2 · each adapter records the harness version it was verified on;
+`hat doctor` warns when the installed one is newer; compatibility tests on recorded payloads per version.
+**H2 · Capability report** · S · deps: H1 · from the harness's release notes, a report of new capabilities and of
+hat functions they may replace (§4); the user decides. Runs on demand or on a schedule, never on its own.
 
-**X4 · Projects configure, never fork** · S · deps: — (early start)
-- Found updating a real workspace (2026-11-10): it had to keep its own copy of three layer files because the
-  template hard-codes what differs per project: the checklist item `pre-pr-pass.sh` cites by number, and the
-  ticket system (Jira) in `sync-memory` and `pre-pr-review`. A forked file stops receiving updates
-  (`update.sh --keep-mine` only quiets it). `decision-index.sh` shows the fix: paths read from `orchestrator.conf`.
-- What differs per project becomes a conf key or is looked up by name (checklist items by title, `TICKETS=` for
-  the ticket system), so many projects share one template.
-- Criteria: a workspace with its own checklist numbering and a ticket system keeps every layer file identical to
-  the template; `.orchestrator/update-keep` stays empty. Tokens: 0.
+### P1 · Observability
 
-**M1 · Cross-project in-flight view and dependency check** · S · deps: X1
-- `hat status` adds task-file dependencies across projects: cycles, blocked tasks, stale *Resume* items.
+**O1 · Progress against the plan** · M · deps: DE1, R5 · per active task: criteria status, attempts, tokens and
+time against its budget, in `hat status` and `telemetry.py report`.
 
-### Phase 3 · Project knowledge → v0.10.0
+### P1 · Governance
 
-- **Goal**: each project's decisions and finished features become an OKF v0.2 bundle that the ODD flow can query,
-  built without a model, and the flow doesn't get more expensive.
-- **Entry**: phase 2 gate. **Decisions**: D2 (llm-wiki), D3 (OKF v0.2), D4 (YAML parsing).
-- **Exit gate**: the spec's v0.2 examples validate, v0.1 with legacy warnings, unknown keys preserved; export is
-  incremental (no change → no write; one decision changed → one concept); nothing failing the secret check is
-  exported; on the phase-1 workspace, tokens per large task don't rise against the baseline, with the share of
-  queries that fed a plan reported.
+- **Exit gate**: a project cannot loosen a global deny (test); compiled settings keep the user's own entries;
+  smoke covers a denied path outside the project and an `ask` on a destructive command; budget warnings appear
+  at the configured ceiling and never stop a session.
 
-**K1 · Native OKF v0.2 validator and indexer** · M · deps: — (early start)
-- `knowledge.py validate|index`: OKF §11 conformance plus our rules (actors, ISO timestamps with offset,
-  `x_scope`, secret patterns from `memory-check.py`). Stdlib; PyYAML only if present (D4). Tokens: 0.
+**GV1 · Policy floor compiled to Claude permissions** · M · deps: X1 · `~/.hat/policy.toml` + project overrides
+that only tighten → `permissions` (deny paths outside the project, ask for destructive commands, MCP allowlist).
+**GV2 · Budget warnings** · S · deps: R5 (realistic ceilings) · one line to the orchestrator when hit.
 
-**K2 · Deterministic export** · M · deps: K1, X1
-- `knowledge.py export` → `knowledge/` from `memory/DECISIONS.md` and `odd/tasks/*` with `Status: done`;
-  `sources` point at the originals; `generated.by: hat/<version>`; `verified` only with a human sign-off in the
-  source. Tokens: 0.
+### P2 · Multi-Harness
 
-**K3 · Query and ODD wiring** · S · deps: K2
-- `knowledge.py query <terms>` (navigation + grep, path and description); `AGENTS.md` step 1 queries before a
-  large plan; export runs when a task file reaches `done`. Tokens: + ~200–500 per large task, 0 for small ones.
-
-**K4 · llm-wiki evaluation spike (optional)** · S · deps: K1, D2
-- On a throwaway copy, cross-run the two validators; report what interoperates. No code copied.
-
-### Phase 4 · Governance → v0.11.0
-
-- **Goal**: one policy floor for every project and runtime, enforced by each runtime's own mechanism, before
-  anything crosses a project boundary or runs unattended.
-- **Entry**: phase 2 gate (needs the registry). Can run in parallel with phase 3.
-- **Exit gate**: a project cannot loosen a global deny (test); compiled settings keep the user's own entries
-  (update rules); smoke covers a denied path outside the workspace and an `ask` on a destructive command;
-  budget warnings appear at the configured ceiling and never stop a session.
-
-**G1 · Policy floor compiled to Claude permissions** · M · deps: X1
-- `~/.hat/policy.toml` + project overrides that only tighten → `.claude/settings.json` `permissions` (deny paths
-  outside the workspace, ask for destructive commands, MCP allowlist per project); secret rules on export.
-**G2 · Codex policy compilation** · M · deps: G1, D6 (Codex installed); otherwise carried to phase 7.
-**G3 · Budget warnings** · S · deps: R5 (realistic ceilings) · one line to the orchestrator when hit.
-
-### Phase 5 · Code and agent intelligence → v0.12.0
-
-- **Goal**: better context and better agent/model choice, each proven against the baseline.
-- **Entry**: phase 1 gate (baseline), phase 3 (knowledge to link code to decisions). **Decisions**: D7 (which
-  track first and whether F2 is built at all, from the baseline).
-- **Exit gate**: each shipped feature has an A/B with n ≥ 3 showing quality holds and total tokens drop, or it
-  ships opt-in; the recommendation table never prints a direction below n = 3.
-
-**C1 · Symbol and import index** · M · deps: D7 gate
-- `.orchestrator/index/<repo>.sqlite`, incremental by `git diff` since the last indexed commit; Python via
-  `ast`, others via `universal-ctags` when installed. No vectors. Tokens: 0 to build.
-**C2 · Queries `where|refs|impact|context`** · M · deps: C1 · Tokens: replaces explorer runs when it hits.
-**C3 · A/B on B1 and B3** · S, quota · deps: C2, R6.
-**A1 · Recommendation table** · M · deps: R5, R6
-- `telemetry.py recommend`: per task type, tier vs quality, cost, consumption and coverage as separate columns,
-  n beside each. Evidence for the user to change tiers; never rewires them. Tokens: 0.
-
-### Phase 6 · Sharing and routing → v0.13.0
-
-- **Goal**: knowledge moves between projects only when allowed, with its provenance; the meta-harness can say
-  which harness fits a task.
-- **Entry**: phases 3 and 4.
-- **Exit gate**: a concept reaches a share only from a project that exports to it and only into projects that
-  import it (tests); provenance (`sources`, `x_origin_project`, `verified`, `generated`) survives the sync;
-  sharing grants no file, tool or telemetry access; routing output is a recommendation only.
-
-**K5 · Shares and global knowledge** · M · deps: K2, G1
-- `knowledge.py sync` → `~/.hat/knowledge/shared/<share>/`; global bundle read-only for every project.
-**M2 · Routing recommendation** · S · deps: X2, G1 · harness by capabilities and policy.
-
-### Phase 7 · Meta-harness execution → v1.0.0
-
-- **Goal**: the meta-harness can run approved tasks on the right harness, recover them, and parallelize only
-  where it is safe and cheaper.
-- **Entry**: phases 4, 5 and 6. **Decisions**: D6 (Codex), D8 (dispatch opt-in per task).
-- **Exit gate**: a dispatched task is recorded as a run with `project_id`, its evidence lands in the task file by
-  the ODD rules, an interrupted dispatch resumes from the task file; parallel runs only for independent tasks in
-  separate repos or worktrees, and only for task types where telemetry shows no cost penalty; full regression on
-  3 OSes; docs updated.
-
-**M3 · Opt-in headless dispatch** · L · deps: M2, G1 (G2 for Codex), R5
-- `hat run <project> <task>` for one approved task; spends quota; never the default.
-**M4 · Safe parallelism** · L · deps: M3, A1.
+**GV3 · Codex policy compilation** · M · deps: GV1, D6.
 **A2 · Codex telemetry adapter** · M · deps: D6, X2 · real payloads first, then the adapter.
-**I1 · Integration, regression and docs** · M · deps: the phase's tasks.
 
-## 4. Decisions, by the phase that needs them
+### P3 · Intelligence
+
+Built only where the baseline shows the gain (D7); each feature has an A/B with n ≥ 3 or ships opt-in.
+
+**C1 · Symbol and import index** · M · incremental by `git diff`; `ast` for Python, `universal-ctags` otherwise.
+**C2 · Queries `where|refs|impact|context`** · M · deps: C1.
+**C3 · A/B on B1 and B3** · S, quota · deps: C2, R6.
+**A1 · Recommendation table** · M · deps: R5, R6 · tier vs quality and cost per task type; never rewires tiers.
+**K4 · llm-wiki evaluation spike (optional)** · S · deps: K1, D2.
+**K5 · Shares and global knowledge** · M · deps: K2, GV1 · knowledge between projects only under policy.
+**M2 · Routing recommendation** · S · deps: X2, GV1 · which harness fits a task; recommends, never acts.
+**M3 · Opt-in headless dispatch** · L · deps: M2, GV1, R5 · `hat run <project> <task>`; spends quota; never the
+default (D8).
+**M4 · Safe parallelism** · L · deps: M3, A1.
+
+## 6. Decisions
 
 | # | Decision | Needed by | Recommendation |
 |---|---|---|---|
-| D1 | What the rename to `hat` covers | Phase 0 | applied in #26 as recommended: URLs + name in prose; paths kept |
-| D9 | Docs language | Phase 0 | **decided 2026-11-06: English** |
-| D5 | Global location | Phase 1 | **changed 2026-11-10**: `~/.hat/` is the install, read-only on project files; see [global-install.md](global-install.md) §9 |
-| D2 | llm-wiki has no licence | Phase 3 | native provider; ask the author; optional provider if licensed |
-| D3 | OKF version | Phase 3 | v0.2, pinned per bundle; read v0.1 with fallbacks (confirmed 2026-11-06, applied in K1) |
-| D4 | YAML parsing | Phase 3 | stdlib subset; PyYAML when present (confirmed 2026-11-06, applied in K1) |
-| D7 | Which phase-5 track first, and whether F2 is built | Phase 5 | from the baseline: F2 only if exploration ≥ ~20 % of tokens |
-| D6 | Install Codex | Phase 4 (G2) or 7 | when Codex matters for real work |
-| D8 | Headless dispatch | Phase 7 | opt-in per task, after governance |
+| D1 | What the rename to `hat` covers | done | applied in #26: URLs + name in prose; paths kept |
+| D9 | Docs language | done | **decided 2026-11-06: English** |
+| D5 | Global location | done | **changed 2026-11-10**: `~/.hat/`; see [global-install.md](global-install.md) §9 |
+| D10 | Identity, flow and priorities | done | **decided 2026-11-11**: the identity above, §2 and §3 |
+| D11 | What V3 (commit scope) covers | Now | the user's |
+| D2 | llm-wiki has no licence | Knowledge Engine | native provider; ask the author; optional provider if licensed |
+| D3 | OKF version | Knowledge Engine | v0.2, pinned per bundle; read v0.1 with fallbacks (applied in K1) |
+| D4 | YAML parsing | Knowledge Engine | stdlib subset; PyYAML when present (applied in K1) |
+| D6 | Install Codex | P2 | when Codex matters for real work |
+| D7 | Which intelligence track first, and whether C1–C3 are built | P3 | from the baseline: C1 only if exploration ≥ ~20 % of tokens |
+| D8 | Headless dispatch | P3 | opt-in per task, after governance |
 
-## 5. Risks
+## 7. Risks
 
 | Risk | Effect | Mitigation |
 |---|---|---|
-| No field data yet | later phases optimize guesses | phases 0–1 first |
-| Coordination overhead (orchestrator already ~51 % of tokens) | the meta-harness costs more than it saves | every phase gate compares with the baseline; defaults only after a measured gain |
-| Claude transcript format is private | usage turns `unavailable` after an update | parser versioned, coverage in every report |
+| Coordination overhead (orchestrator already ~51 % of tokens) | hat costs more than it saves | every gate compares with the baseline; a context budget per engine; defaults only after a measured gain |
+| A harness feature makes part of hat obsolete | duplicated work, two sources of truth | capability discovery (§4); delegate to the harness when it covers the need |
+| Rigid checks get in the model's way | false blocks, worse work | signals are evidence; blocking only on the user's rules; a false-positive case in each gate |
+| Claude transcript format is private | usage turns `unavailable` after an update | parser versioned, coverage in every report, H1 warns on a new version |
 | OKF young and vendor-driven | bundles need migrating | pin `okf_version`; Markdown stays the truth; bundles re-exportable |
-| llm-wiki licence | legal block on reuse | native provider; no code copied |
 | Codex unavailable | "runtime agnostic" untested | capabilities declare only what's verified; no forced parity |
 | Benchmarks spend quota | small samples read as results | n ≥ 3 enforced in code; runs only on the user's go |
-| Scope (one maintainer, eight phases) | half-built layers | each phase ships alone; phases 5–7 can be cut without breaking 0–4 |
+| Scope (one maintainer) | half-built layers | each step ships alone; P2 and P3 can be cut without breaking P0 and P1 |
 | Cross-project leaks | one project's data reaches another | read-only registry, allowlisted shares, secret check, governance before sharing |
 
-## 6. Next step
+## 8. Next step
 
-Phase 0 starts with **R1** (contract doc), with **S1** in parallel since neither depends on anything. Before
-the release (R4), D1 and D9 must be decided. The phase's task file is `odd/tasks/phase-0-close-f1.md`, created
-when the user says go.
+Consolidation (V1–V4) while the baseline collects data (R5). The two P0 design docs (KE1, DE1) can be written
+in the meantime; their code waits for the baseline.
