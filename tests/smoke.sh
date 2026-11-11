@@ -156,6 +156,7 @@ git -C "$api" checkout -qb feat/top; at 5 "test: b"; at 6 "fix: b"
 git -C "$api" checkout -q feat/base; at 4 "test: c"; at 7 "feat: c"
 git -C "$api" checkout -q feat/top; git -C "$api" merge -q --no-edit -X ours feat/base >/dev/null
 run "pre-pr-pass stamps a stacked branch that merged its base" bash .orchestrator/scripts/pre-pr-pass.sh api feat/top
+git -C "$api" checkout -q feat/x
 
 sed -i.bak 's/^ATTRIBUTION=""/ATTRIBUTION="refuse"/' .orchestrator/orchestrator.conf
 printf 'Why: smoke.\n\nCo-authored-by: Ana <ana@example.com>\n' >"$tmp/body.md"
