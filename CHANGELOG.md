@@ -11,6 +11,11 @@ into the new version's section.
 
 ## Unreleased
 
+- `hat migrate --cleanup` never removes a link, anything reached through one, or anything inside an app repo
+  (`REPOS`), and lists what it left alone. A real workspace keeps its agents in an app repo and links the root's
+  `.claude/agents` to them: the cleanup would have deleted the repo's agents through the link. The layer copy keeps
+  links as links, and the "changed since the migration" check compares them as links.
+
 - The test suite is hermetic: every test module imports `tests/hermetic.py` first (a test checks it), so no test
   reads or writes the real hat home, even where this clone is a registered hat project; `smoke.sh` does the same.
   `tests/__init__.py` lets one module run as `tests.test_<name>`. The unreleased-skill update test uses an

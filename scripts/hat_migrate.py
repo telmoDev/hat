@@ -216,7 +216,8 @@ def copy_layer(ws, dst):
             os.makedirs(os.path.dirname(target), exist_ok=True)
             shutil.copy2(p, target)
         elif os.path.isdir(p):
-            shutil.copytree(p, target, ignore=shutil.ignore_patterns("telemetry.db*"))
+            # symlinks=True: a link (e.g. .claude/agents into an app repo) is kept as a link, never its target
+            shutil.copytree(p, target, symlinks=True, ignore=shutil.ignore_patterns("telemetry.db*"))
 
 
 def refresh(ws):
@@ -389,6 +390,20 @@ def strip_hooks(path):
     return True
 
 
+def removable(ws, path, repos):
+    """Only a path of the layer itself: never a link, nothing reached through one, nothing inside an app repo."""
+    root = os.path.realpath(ws)
+    rel = os.path.relpath(path, ws).replace("\\", "/").split("/")
+    for i in range(1, len(rel) + 1):  # no link anywhere on the way
+        if os.path.islink(os.path.join(ws, *rel[:i])):
+            return False
+    real = os.path.realpath(path)
+    if not real.startswith(root + os.sep):
+        return False
+    return not any(real == os.path.realpath(os.path.join(ws, r)) or
+                   real.startswith(os.path.realpath(os.path.join(ws, r)) + os.sep) for r in repos if r != ".")
+
+
 def cleanup(ws):
     ws = hat.norm(ws)
     hit = hat.resolve(ws)
@@ -402,17 +417,43 @@ def cleanup(ws):
         if dirty:
             return fail("uncommitted changes in the orchestration layer: commit them first\n" + dirty)
     copy = os.path.join(hat.state(hit[0]), "migrated-layer")
-    now = {r for r in layer_files(ws) if not generated(ws, r) and not r.startswith(SKIP[:2])}
-    then = {os.path.relpath(os.path.join(d, f), copy).replace("\\", "/") for d, _, fs in os.walk(copy) for f in fs}
-    then = {r for r in then if not generated(copy, r) and not r.startswith(SKIP[:2])}
-    changed = sorted(r for r in now ^ then) + sorted(
-        r for r in now & then if read(os.path.join(ws, *r.split("/"))) != read(os.path.join(copy, *r.split("/"))))
+    def entries(base):
+        """{rel: what it is}: a file's text, or a link's target (a link is never followed)."""
+        out = {}
+        for top in LAYER:
+            p = os.path.join(base, top)
+            if os.path.islink(p):
+                out[top] = "link:" + os.readlink(p)
+            elif os.path.isfile(p):
+                out[top] = read(p)
+            for d, dirs, files in os.walk(p) if os.path.isdir(p) and not os.path.islink(p) else []:
+                for name in dirs + files:
+                    q = os.path.join(d, name)
+                    rel = os.path.relpath(q, base).replace("\\", "/")
+                    if os.path.islink(q):
+                        out[rel] = "link:" + os.readlink(q)
+                    elif name in files:
+                        out[rel] = read(q)
+        return {r: v for r, v in out.items() if not generated(ws, r) and not r.startswith(SKIP[:2])}
+    now, then = entries(ws), entries(copy)
+    changed = sorted(r for r in set(now) ^ set(then)) + sorted(r for r in set(now) & set(then) if now[r] != then[r])
     if changed:
         return fail("the layer changed since the migration, so hat's copy is out of date (%s). Nothing removed."
                     % ", ".join(changed[:5]))
-    removed = []
+    removed, kept = [], []
+    conf = read(os.path.join(ws, ".orchestrator", "orchestrator.conf"))
+    m = re.search(r'^REPOS="?([^"\n]*)"?', conf, re.M)
+    repos = m.group(1).split() if m else []
+
+    def ok(p):
+        if removable(ws, p, repos):
+            return True
+        kept.append(os.path.relpath(p, ws).replace("\\", "/"))
+        return False
     for top in ("AGENTS.md", "CLAUDE.md", ".orchestrator", "memory", "odd"):
         p = os.path.join(ws, top)
+        if os.path.lexists(p) and not ok(p):
+            continue
         if os.path.isdir(p):
             shutil.rmtree(p)
             removed.append(top)
@@ -423,27 +464,30 @@ def cleanup(ws):
     for base in (".agents/skills", ".claude/skills"):
         for name in sorted(skills):
             p = os.path.join(ws, *base.split("/"), name)
-            if os.path.isdir(p):
+            if os.path.lexists(p) and ok(p) and os.path.isdir(p):
                 shutil.rmtree(p)
                 removed.append("%s/%s" % (base, name))
     for rel in [".claude/workflows/pre-pr-review.js"] + [".claude/agents/" + n for n in HAT_AGENTS]:
-        if os.path.isfile(os.path.join(ws, *rel.split("/"))):
-            os.remove(os.path.join(ws, *rel.split("/")))
+        p = os.path.join(ws, *rel.split("/"))
+        if os.path.isfile(p) and ok(p):
+            os.remove(p)
             removed.append(rel)
     for folder, ext in ((".claude/agents", ".md"), (".codex/agents", ".toml")):
         d = os.path.join(ws, *folder.split("/"))
-        for name in sorted(os.listdir(d)) if os.path.isdir(d) else []:
+        for name in sorted(os.listdir(d)) if os.path.isdir(d) and not os.path.islink(d) else []:
             stem = name[: -len(ext)]
-            if name.endswith(ext) and (stem in ("explorer", "architect") or re.search(r"[-_]dev$", stem)):
+            if name.endswith(ext) and (stem in ("explorer", "architect") or re.search(r"[-_]dev$", stem)) \
+                    and ok(os.path.join(d, name)):
                 os.remove(os.path.join(d, name))
                 removed.append("%s/%s" % (folder, name))
     for rel in (".claude/settings.json", ".codex/hooks.json"):
-        if strip_hooks(os.path.join(ws, *rel.split("/"))):
+        p = os.path.join(ws, *rel.split("/"))
+        if os.path.lexists(p) and ok(p) and strip_hooks(p):
             removed.append(rel + " (hat's hooks)")
     for folder in (".claude/workflows", ".claude/agents", ".claude/skills", ".claude", ".codex/agents", ".codex",
                    ".agents/skills", ".agents"):
         d = os.path.join(ws, *folder.split("/"))
-        if os.path.isdir(d) and not os.listdir(d):
+        if os.path.isdir(d) and not os.path.islink(d) and not os.listdir(d):
             os.rmdir(d)
     with open(info, encoding="utf-8") as f:
         data = json.load(f)
@@ -461,6 +505,8 @@ def cleanup(ws):
     else:
         note = "the workspace isn't a git repo: hat's copy is in %s" % hat.norm(copy)
     print("hat migrate --cleanup: removed %s; %s." % (", ".join(removed), note))
+    if kept:
+        print("Left alone (a link, or inside an app repo): " + ", ".join(sorted(set(kept))))
     print("The project now runs on hat: new sessions get its header, memory and rules from %s."
           % hat.norm(hat.state(hit[0])))
     return 0
